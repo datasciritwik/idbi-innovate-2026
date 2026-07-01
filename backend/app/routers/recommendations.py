@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..data_store import DataNotFoundError
+from ..security.deps import require_session
 from ..services.allocation import generate_savings_plan
 
-router = APIRouter(prefix="/api/users", tags=["recommendations"])
+router = APIRouter(prefix="/api/users", tags=["recommendations"], dependencies=[Depends(require_session)])
 
 
 @router.get("/{user_id}/recommendation")

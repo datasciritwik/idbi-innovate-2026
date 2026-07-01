@@ -8,7 +8,7 @@ rather than inventing financial facts.
 """
 import json
 
-from anthropic import Anthropic
+import httpx
 from fastapi import HTTPException
 
 from .. import config
@@ -16,8 +16,6 @@ from ..data_store import get_store
 from .allocation import generate_savings_plan
 from .features import compute_features
 from .portfolio import get_portfolio_snapshot
-
-_client: Anthropic | None = None
 
 SYSTEM_PROMPT = """You are Wren, a digital wealth concierge for a bank's mobile app.
 
@@ -33,16 +31,13 @@ corporate boilerplate, not overly casual. Use ₹ for amounts. Keep replies to
 """
 
 
-def _get_client() -> Anthropic:
-    global _client
-    if not config.ANTHROPIC_API_KEY:
+def _require_endpoint() -> str:
+    if not config.LLM_ENDPOINT_URL:
         raise HTTPException(
             status_code=503,
-            detail="ANTHROPIC_API_KEY is not configured on the server; conversational replies are unavailable.",
+            detail="LLM_ENDPOINT_URL is not configured on the server; conversational replies are unavailable.",
         )
-    if _client is None:
-        _client = Anthropic(api_key=config.ANTHROPIC_API_KEY)
-    return _client
+    return config.LLM_ENDPOINT_URL
 
 
 def build_context(user_id: str, recent_txn_count: int = 10) -> dict:
@@ -82,14 +77,20 @@ def build_context(user_id: str, recent_txn_count: int = 10) -> dict:
 
 
 def _call(user_prompt: str) -> str:
-    client = _get_client()
-    response = client.messages.create(
-        model=config.LLM_MODEL,
-        max_tokens=500,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-    return "".join(block.text for block in response.content if block.type == "text").strip()
+    """Calls the self-hosted conversational model endpoint. Request/response
+    contract is a placeholder pending the actual deployment — align this once
+    that endpoint's real API is settled."""
+    endpoint = _require_endpoint()
+    try:
+        response = httpx.post(
+            f"{endpoint}/generate",
+            json={"system": SYSTEM_PROMPT, "prompt": user_prompt},
+            timeout=30.0,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Model endpoint request failed: {e}")
+    return response.json()["text"].strip()
 
 
 def chat(user_id: str, message: str) -> str:

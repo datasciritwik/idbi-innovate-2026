@@ -1,3 +1,5 @@
+import { getToken, invalidateToken, recordQuotaRemaining } from './session';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 export interface UserSummary {
@@ -76,24 +78,33 @@ export interface TriggerResult {
 
 class ApiError extends Error {
   status?: number;
+  retryAfterSeconds?: number;
 
-  constructor(message: string, status?: number) {
+  constructor(message: string, status?: number, retryAfterSeconds?: number) {
     super(message);
     this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, _retriedAfter401 = false): Promise<T> {
+  const token = await getToken();
   let res: Response;
   try {
     res = await fetch(`${API_BASE_URL}${path}`, {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       ...init,
     });
   } catch {
     throw new ApiError(
       `Can't reach the personalization engine — is the backend running at ${API_BASE_URL}?`,
     );
+  }
+
+  if (res.status === 401 && !_retriedAfter401) {
+    // Session token expired/invalid server-side — get a fresh one and retry once.
+    invalidateToken();
+    return request<T>(path, init, true);
   }
 
   if (!res.ok) {
@@ -104,10 +115,39 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // response wasn't JSON; keep statusText
     }
-    throw new ApiError(detail, res.status);
+    const retryAfter = res.headers.get('Retry-After');
+    throw new ApiError(detail, res.status, retryAfter ? Number(retryAfter) : undefined);
   }
 
+  const quotaHeader = res.headers.get('X-Quota-Remaining-Seconds');
+  if (quotaHeader) recordQuotaRemaining(Number(quotaHeader));
+
   return res.json() as Promise<T>;
+}
+
+/**
+ * Wraps a GPU-gated call (chat, triggers): the backend returns 503 with
+ * Retry-After when every concurrent GPU slot is busy. Retries a few times
+ * with the server-specified backoff, calling onQueued so the UI can show a
+ * "busy, please wait" state instead of a hard error.
+ */
+async function withQueueRetry<T>(
+  fn: () => Promise<T>,
+  onQueued?: (attempt: number, retryAfterSeconds: number) => void,
+  maxAttempts = 3,
+): Promise<T> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isQueueBusy = err instanceof ApiError && err.status === 503;
+      if (!isQueueBusy || attempt === maxAttempts) throw err;
+      const waitSeconds = err.retryAfterSeconds ?? 5;
+      onQueued?.(attempt, waitSeconds);
+      await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+    }
+  }
+  throw new ApiError('Ran out of retry attempts.');
 }
 
 export const api = {
@@ -115,14 +155,21 @@ export const api = {
   getUser: (userId: string) => request<UserProfile>(`/api/users/${userId}`),
   getPortfolio: (userId: string) => request<PortfolioSnapshot>(`/api/users/${userId}/portfolio`),
   getRecommendation: (userId: string) => request<Recommendation>(`/api/users/${userId}/recommendation`),
-  sendChat: (userId: string, message: string) =>
-    request<{ reply: string }>(`/api/users/${userId}/chat`, {
-      method: 'POST',
-      body: JSON.stringify({ message }),
-    }),
+  sendChat: (userId: string, message: string, onQueued?: (attempt: number, retryAfterSeconds: number) => void) =>
+    withQueueRetry(
+      () =>
+        request<{ reply: string }>(`/api/users/${userId}/chat`, {
+          method: 'POST',
+          body: JSON.stringify({ message }),
+        }),
+      onQueued,
+    ),
   listTriggers: () => request<TriggerInfo[]>('/api/triggers'),
-  fireTrigger: (triggerType: string) =>
-    request<TriggerResult>(`/api/triggers/${triggerType}`, { method: 'POST' }),
+  fireTrigger: (triggerType: string, onQueued?: (attempt: number, retryAfterSeconds: number) => void) =>
+    withQueueRetry(
+      () => request<TriggerResult>(`/api/triggers/${triggerType}`, { method: 'POST' }),
+      onQueued,
+    ),
 };
 
 export { ApiError };

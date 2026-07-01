@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..data_store import DataNotFoundError
+from ..security.deps import require_session
 from ..services.portfolio import get_portfolio_snapshot
 
-router = APIRouter(prefix="/api/users", tags=["portfolio"])
+router = APIRouter(prefix="/api/users", tags=["portfolio"], dependencies=[Depends(require_session)])
 
 
 @router.get("/{user_id}/portfolio")

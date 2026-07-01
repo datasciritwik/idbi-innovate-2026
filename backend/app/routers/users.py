@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..data_store import DataNotFoundError, get_store
+from ..security.deps import require_session
 from ..services.features import compute_features
 
-router = APIRouter(prefix="/api/users", tags=["users"])
+router = APIRouter(prefix="/api/users", tags=["users"], dependencies=[Depends(require_session)])
 
 
 @router.get("")

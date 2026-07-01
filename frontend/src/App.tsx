@@ -94,7 +94,9 @@ export default function App() {
       setIsProcessing(true);
       setStatusText(actionId === 'raise' ? 'Analyzing salary adjustments...' : 'Reviewing liquidity options...');
       try {
-        const result = await api.fireTrigger(actionId);
+        const result = await api.fireTrigger(actionId, (attempt, wait) =>
+          setStatusText(`All concierge lines are busy — retrying in ${wait}s (attempt ${attempt})...`),
+        );
         setSelectedUserId(result.user_id);
         await loadUser(result.user_id, { greet: false });
         setWrenText(result.reply);
@@ -115,7 +117,9 @@ export default function App() {
     setIsProcessing(true);
     setStatusText('Processing request...');
     try {
-      const { reply } = await api.sendChat(selectedUserId, message);
+      const { reply } = await api.sendChat(selectedUserId, message, (attempt, wait) =>
+        setStatusText(`All concierge lines are busy — retrying in ${wait}s (attempt ${attempt})...`),
+      );
       setWrenText(reply);
     } catch (err) {
       setWrenText(err instanceof ApiError ? err.message : 'Something went wrong reaching Wren.');

@@ -4,9 +4,10 @@ FastAPI backend that both the frontend and any future mobile integration call in
 
 1. **Personalization engine** — surplus detection, risk-matched allocation, savings plan
    generation, and portfolio snapshotting. Pure computation over the synthetic dataset, no LLM.
-2. **Conversational layer** — retrieval-then-reason over that same computed context, via the
-   Anthropic API. No fine-tuning, no general-knowledge chat: every reply is grounded in a JSON
-   context block built from the specific user's profile/features/portfolio/recommendation.
+2. **Conversational layer** — retrieval-then-reason over that same computed context, via a
+   self-hosted model endpoint (`LLM_ENDPOINT_URL`). No fine-tuning, no general-knowledge chat:
+   every reply is grounded in a JSON context block built from the specific user's
+   profile/features/portfolio/recommendation.
 
 ## Setup
 
@@ -14,7 +15,7 @@ FastAPI backend that both the frontend and any future mobile integration call in
 cd backend
 uv venv
 uv pip install -r requirements.txt
-cp .env.example .env   # then fill in ANTHROPIC_API_KEY
+cp .env.example .env   # then fill in LLM_ENDPOINT_URL once the model endpoint is deployed
 ```
 
 Requires the synthetic dataset to already exist at `../data/output/` (run
@@ -42,7 +43,7 @@ uvicorn app.main:app --reload --port 8000
 | GET | `/api/triggers` | list the 3 scripted life-event triggers and which demo user carries each |
 | POST | `/api/triggers/{trigger_type}` | `raise` \| `medical` \| `job_loss` → before/after feature diff + Wren's reaction |
 
-Without `ANTHROPIC_API_KEY` set, `/chat` and `/triggers/*` return `503` rather than crashing —
+Without `LLM_ENDPOINT_URL` set, `/chat` and `/triggers/*` return `503` rather than crashing —
 everything else works standalone for local frontend development.
 
 ## Design notes
