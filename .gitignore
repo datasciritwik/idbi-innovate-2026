@@ -1,0 +1,13 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+node_modules/
+.env
+.DS_Store
+
+# Generated synthetic data — baked into backend at deploy time, not versioned
+data/output/
+
+# Internal planning doc — not for the public repo
+idbi-innovate-2026-submission-plan.md
