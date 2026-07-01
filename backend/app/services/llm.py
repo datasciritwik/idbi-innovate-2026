@@ -18,7 +18,7 @@ from .allocation import generate_savings_plan
 from .features import compute_features
 from .portfolio import get_portfolio_snapshot
 
-SYSTEM_PROMPT = """You are Wren, a digital wealth concierge for a bank's mobile app.
+SYSTEM_PROMPT = """You are Vitta, a digital wealth concierge for a bank's mobile app.
 
 You speak directly to one customer, using ONLY the CONTEXT block provided in
 each message — their profile, spending features, portfolio snapshot, and
@@ -128,7 +128,7 @@ async def chat_stream(user_id: str, message: str, session_id: str, language: str
         yield delta
     reply = "".join(pieces).strip()
     memory.record_turn(session_id, "customer", message)
-    memory.record_turn(session_id, "wren", reply)
+    memory.record_turn(session_id, "vitta", reply)
 
 
 async def trigger_reaction_stream(
@@ -157,7 +157,7 @@ async def trigger_reaction_stream(
     }
     prompt = (
         f"CONTEXT:\n{json.dumps(context, default=str)}\n\n"
-        "React to this life event as Wren, speaking directly to the customer. "
+        "React to this life event as Vitta, speaking directly to the customer. "
         "Acknowledge what changed (using the before/after numbers), then give one concrete, "
         "specific next step tied to their current recommendation."
         f"{_language_instruction(language)}"

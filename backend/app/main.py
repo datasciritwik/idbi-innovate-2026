@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import config
 from .routers import chat, portfolio, recommendations, session, triggers, users, warmup
 
-app = FastAPI(title="Wren Personalization Engine", version="0.1.0")
+app = FastAPI(title="Vitta Personalization Engine", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,

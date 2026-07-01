@@ -23,7 +23,7 @@ export default function InputBar({ onSend, disabled = false }: InputBarProps) {
         value={text}
         onChange={(e) => setText(e.target.value)}
         disabled={disabled}
-        placeholder="Ask Wren about your wealth..."
+        placeholder="Ask Vitta about your wealth..."
         className="w-full bg-ink-raised/55 text-paper text-[12px] px-4.5 py-3 pr-12 rounded-full border border-ink-border focus:border-gold/60 focus:shadow-[0_0_12px_rgba(212,175,106,0.06)] focus:outline-none placeholder:text-paper-dim/40 transition-all duration-300 font-body disabled:opacity-50"
       />
       <button

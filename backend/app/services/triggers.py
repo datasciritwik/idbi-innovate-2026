@@ -1,6 +1,6 @@
 """Life-event triggers: the underlying data event is scripted (see
 data/scripts/generate_transactions.py — 3 demo users each carry one baked-in
-event at month 2026-02), but the before/after feature comparison and Wren's
+event at month 2026-02), but the before/after feature comparison and Vitta's
 reaction are computed live from that data, not hardcoded strings.
 """
 from typing import AsyncIterator

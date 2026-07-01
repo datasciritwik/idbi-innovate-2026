@@ -39,9 +39,9 @@ uvicorn app.main:app --reload --port 8000
 | GET | `/api/users/{user_id}` | full profile + computed features (surplus, cashflow trend, top spend) |
 | GET | `/api/users/{user_id}/portfolio` | total value, latest-month change, allocation by asset class |
 | GET | `/api/users/{user_id}/recommendation` | risk-matched allocation gap + monthly savings plan |
-| POST | `/api/users/{user_id}/chat` | `{"message": "..."}` → Wren's grounded reply |
+| POST | `/api/users/{user_id}/chat` | `{"message": "..."}` → Vitta's grounded reply |
 | GET | `/api/triggers` | list the 3 scripted life-event triggers and which demo user carries each |
-| POST | `/api/triggers/{trigger_type}` | `raise` \| `medical` \| `job_loss` → before/after feature diff + Wren's reaction |
+| POST | `/api/triggers/{trigger_type}` | `raise` \| `medical` \| `job_loss` → before/after feature diff + Vitta's reaction |
 
 Without `LLM_ENDPOINT_URL` set, `/chat` and `/triggers/*` return `503` rather than crashing —
 everything else works standalone for local frontend development.
@@ -57,7 +57,7 @@ everything else works standalone for local frontend development.
   investment.
 - **Life-event triggers** (`services/triggers.py`): the *event* is scripted in the data (3 demo
   users each carry one baked-in event starting 2026-02 — see
-  `data/scripts/generate_transactions.py`), but the before/after feature comparison and Wren's
+  `data/scripts/generate_transactions.py`), but the before/after feature comparison and Vitta's
   reaction text are computed live, not hardcoded strings. This is what the plan's "hardcoded
   life-event triggers to demo adaptability live" means in practice.
 - **RAG**: with ~30 demo users and a year of transactions, a vector store would be overkill —

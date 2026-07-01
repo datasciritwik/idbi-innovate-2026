@@ -2,7 +2,7 @@ import { MicVAD } from '@ricky0123/vad-web';
 import { float32ToWavBase64 } from './wavEncode';
 
 export interface VoiceSessionCallbacks {
-  /** User started speaking — including "barge-in" while Wren is still talking. */
+  /** User started speaking — including "barge-in" while Vitta is still talking. */
   onSpeechStart: () => void;
   /** User finished an utterance; `wavBase64` is ready to send to the backend. */
   onSpeechEnd: (wavBase64: string) => void;

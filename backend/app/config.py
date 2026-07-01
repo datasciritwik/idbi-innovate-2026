@@ -24,7 +24,7 @@ TTS_ENDPOINT_URL = os.getenv("TTS_ENDPOINT_URL", "")
 # separate transcription step feeding the same text pipeline.
 STT_ENDPOINT_URL = os.getenv("STT_ENDPOINT_URL", "")
 
-# Languages Wren can be asked to reply in — the TTS model speaks whatever
+# Languages Vitta can be asked to reply in — the TTS model speaks whatever
 # language the *text* is in, so the LLM is instructed to answer in whichever
 # of these the caller picks. Names are what get sent to the LLM instruction
 # and shown in the frontend; codes are what the frontend/API pass around.

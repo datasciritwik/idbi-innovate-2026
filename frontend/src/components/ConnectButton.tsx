@@ -15,7 +15,7 @@ const DOT_CLASS: Record<ConnectionStatus, string> = {
 
 const LABEL: Record<ConnectionStatus, string> = {
   idle: 'Connect',
-  connecting: 'Waking up Wren...',
+  connecting: 'Waking up Vitta...',
   ready: 'Connected',
   error: 'Retry connection',
 };

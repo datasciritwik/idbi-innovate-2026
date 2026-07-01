@@ -26,7 +26,7 @@ export default function SpokenLine({ wrenText, userQuery }: SpokenLineProps) {
         </AnimatePresence>
       </div>
 
-      {/* Wren Spoken Line */}
+      {/* Vitta Spoken Line */}
       <div className="relative w-full">
         <AnimatePresence mode="wait">
           <motion.div

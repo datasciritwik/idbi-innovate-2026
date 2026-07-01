@@ -32,7 +32,7 @@ export default function App() {
   const [portfolio, setPortfolio] = useState<PortfolioSnapshotData>(emptyPortfolio);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
 
-  // Wren's active spoken response line
+  // Vitta's active spoken response line
   const [wrenText, setWrenText] = useState('Connecting to your account...');
 
   // User's voice/query flash text
@@ -81,7 +81,7 @@ export default function App() {
 
   // Real-time voice mode: continuous mic listening with voice-activity
   // detection (VAD) for auto-endpointing, plus "barge-in" — speaking while
-  // Wren is still replying immediately cancels her in-flight reply/audio.
+  // Vitta is still replying immediately cancels her in-flight reply/audio.
   const [voiceModeActive, setVoiceModeActive] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   // VAD callbacks are registered once (mic session starts once) but need the
@@ -127,7 +127,7 @@ export default function App() {
       );
     } catch (err) {
       if (!(err instanceof DOMException && err.name === 'AbortError')) {
-        setWrenText(err instanceof ApiError ? err.message : 'Something went wrong reaching Wren.');
+        setWrenText(err instanceof ApiError ? err.message : 'Something went wrong reaching Vitta.');
       }
     } finally {
       setIsProcessing(false);
@@ -218,7 +218,7 @@ export default function App() {
 
     // Life-event triggers always play out on their scripted demo user in the
     // backend data — jump the whole widget over so the numbers on screen
-    // match the story Wren is telling.
+    // match the story Vitta is telling.
     if (actionId === 'raise' || actionId === 'medical') {
       setUserQuery(actionId === 'raise' ? 'Got a raise 🎉' : 'Unexpected medical expense');
       setIsProcessing(true);
@@ -274,7 +274,7 @@ export default function App() {
       );
     } catch (err) {
       if (!(err instanceof DOMException && err.name === 'AbortError')) {
-        setWrenText(err instanceof ApiError ? err.message : 'Something went wrong reaching Wren.');
+        setWrenText(err instanceof ApiError ? err.message : 'Something went wrong reaching Vitta.');
       }
     } finally {
       setUserQuery('');
@@ -328,7 +328,7 @@ export default function App() {
         {/* Branding & Status Header */}
         <div className="flex items-center justify-between pb-4 border-b border-ink-border/30">
           <div>
-            <h1 className="font-display-serif text-3xl font-extrabold tracking-widest text-gold bg-gradient-to-r from-gold via-amber-200 to-yellow-100 bg-clip-text text-transparent">WREN</h1>
+            <h1 className="font-display-serif text-3xl font-extrabold tracking-widest text-gold bg-gradient-to-r from-gold via-amber-200 to-yellow-100 bg-clip-text text-transparent">VITTA</h1>
             <p className="text-[9px] uppercase tracking-[0.2em] text-paper-dim/80 font-mono mt-0.5">Concierge Control Center</p>
           </div>
           

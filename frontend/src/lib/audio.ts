@@ -23,7 +23,7 @@ export function enqueueAudioChunk(base64: string) {
 }
 
 /** Stops any in-flight clip and clears pending chunks — call before starting a new reply,
- * or immediately on barge-in when the user starts speaking over Wren. */
+ * or immediately on barge-in when the user starts speaking over Vitta. */
 export function resetAudioQueue() {
   queue = [];
   currentAudio?.pause();

@@ -65,7 +65,7 @@ export default function Avatar({ statusText = "Active now", isProcessing = false
 
       {/* Identity */}
       <h1 className="font-display-serif text-3xl font-light tracking-wide text-paper mb-0.5">
-        Wren
+        Vitta
       </h1>
       
       {/* Status */}
