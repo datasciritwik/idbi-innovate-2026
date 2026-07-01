@@ -5,6 +5,7 @@ from .. import config
 from ..security.deps import SessionContext, require_quota, require_session
 from ..security.gpu_gate import gpu_slot
 from ..services import tts
+from ..services.text_normalize import normalize_numbers_for_speech
 from ..services.triggers import run_trigger
 
 router = APIRouter(prefix="/api/triggers", tags=["triggers"])
@@ -33,7 +34,8 @@ async def fire_trigger(
 
     async with gpu_slot():
         result = run_trigger(trigger_type, language=language)
-        result["audio_base64"] = tts.synthesize(result["reply"], gender=gender)
+        speech_text = normalize_numbers_for_speech(result["reply"], language)
+        result["audio_base64"] = tts.synthesize(speech_text, gender=gender, language=language)
 
     response.headers["X-Quota-Remaining-Seconds"] = str(int(ctx.quota_remaining_seconds or 0))
     return result

@@ -15,14 +15,18 @@ from .. import config
 logger = logging.getLogger(__name__)
 
 
-def synthesize(text: str, gender: str = config.DEFAULT_VOICE_GENDER) -> str | None:
+def synthesize(
+    text: str,
+    gender: str = config.DEFAULT_VOICE_GENDER,
+    language: str = config.DEFAULT_LANGUAGE,
+) -> str | None:
     """Returns base64-encoded WAV audio, or None if TTS is unavailable."""
     if not config.TTS_ENDPOINT_URL:
         return None
     try:
         response = httpx.post(
             f"{config.TTS_ENDPOINT_URL}/synthesize",
-            json={"text": text, "gender": gender},
+            json={"text": text, "gender": gender, "language": language},
             timeout=180.0,
             follow_redirects=True,
         )

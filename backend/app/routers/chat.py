@@ -7,6 +7,7 @@ from ..security.deps import SessionContext, require_quota
 from ..security.gpu_gate import gpu_slot
 from ..services import tts
 from ..services.llm import chat as run_chat
+from ..services.text_normalize import normalize_numbers_for_speech
 
 router = APIRouter(prefix="/api/users", tags=["chat"])
 
@@ -32,7 +33,8 @@ async def chat(user_id: str, body: ChatRequest, response: Response, ctx: Session
             reply = run_chat(user_id, body.message, ctx.session_id, language=language)
         except DataNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e))
-        audio_base64 = tts.synthesize(reply, gender=gender)
+        speech_text = normalize_numbers_for_speech(reply, language)
+        audio_base64 = tts.synthesize(speech_text, gender=gender, language=language)
 
     response.headers["X-Quota-Remaining-Seconds"] = str(int(ctx.quota_remaining_seconds or 0))
     return ChatResponse(reply=reply, audio_base64=audio_base64)
