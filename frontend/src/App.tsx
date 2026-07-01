@@ -5,11 +5,14 @@ import PortfolioSnapshot from './components/PortfolioSnapshot';
 import SpokenLine from './components/SpokenLine';
 import QuickActions from './components/QuickActions';
 import InputBar from './components/InputBar';
+import QuotaBadge from './components/QuotaBadge';
 type ConnectionStatus = 'idle' | 'connecting' | 'ready' | 'error';
 import { api, ApiError } from './lib/api';
 import type { LanguageInfo, PortfolioSnapshot as PortfolioSnapshotData, UserSummary, VoiceGender } from './lib/api';
 import { enqueueAudioChunk, resetAudioQueue } from './lib/audio';
 import { startVoiceSession, stopVoiceSession } from './lib/voice';
+import { ensureQuotaKnown, subscribeToQuota } from './lib/session';
+import type { QuotaInfo } from './lib/session';
 
 const emptyPortfolio: PortfolioSnapshotData = {
   user_id: '',
@@ -49,6 +52,14 @@ export default function App() {
   // an explicit button instead of it landing on their first chat message.
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
   const [connectionDetail, setConnectionDetail] = useState<string | undefined>(undefined);
+
+  // Per-IP free-tier quota (see backend/app/security/quota.py) — surfaced so
+  // users aren't surprised when the concierge suddenly stops responding.
+  const [quota, setQuota] = useState<QuotaInfo | null>(null);
+  useEffect(() => subscribeToQuota(setQuota), []);
+  useEffect(() => {
+    ensureQuotaKnown();
+  }, []);
 
   const handleConnect = async () => {
     setConnectionStatus('connecting');
@@ -517,7 +528,7 @@ export default function App() {
         {/* Card 4: Cold Start Warmup controls */}
         <div className="bg-ink-raised/40 border border-ink-border/60 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-3 mt-auto">
           <div className="flex justify-between items-center">
-            <span className="text-[10px] font-mono tracking-widest text-paper-dim/60 uppercase font-semibold">LLM & TTS Models warmup</span>
+            <span className="text-[10px] font-mono tracking-widest text-paper-dim/60 uppercase font-semibold">Models warmup</span>
             <span className={`w-1.5 h-1.5 rounded-full ${connectionStatus === 'ready' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
           </div>
 
@@ -567,6 +578,13 @@ export default function App() {
             {deviceMode === 'mobile' && (
               <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-28 h-4 rounded-full bg-ink-raised border border-ink-border/30 flex items-center justify-center z-20">
                 <div className="w-10 h-1 rounded-full bg-ink-border/60" />
+              </div>
+            )}
+
+            {/* Free-tier quota badge — visible to the end user, not just us */}
+            {quota && (
+              <div className={`absolute top-3 right-3 z-20 ${deviceMode === 'mobile' ? 'top-8' : ''}`}>
+                <QuotaBadge remainingSeconds={quota.remainingSeconds} totalSeconds={quota.totalSeconds} />
               </div>
             )}
 

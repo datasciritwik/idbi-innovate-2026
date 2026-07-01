@@ -21,6 +21,12 @@ export interface QuotaInfo {
 let cached: StoredSession | null = null;
 let pending: Promise<string> | null = null;
 let lastQuota: QuotaInfo | null = null;
+const quotaListeners = new Set<(quota: QuotaInfo) => void>();
+
+function notifyQuotaListeners() {
+  if (!lastQuota) return;
+  for (const listener of quotaListeners) listener(lastQuota);
+}
 
 function readStorage(): StoredSession | null {
   try {
@@ -50,6 +56,7 @@ async function bootstrap(): Promise<string> {
   }
   const body = (await res.json()) as SessionResponse;
   lastQuota = { remainingSeconds: body.quota_remaining_seconds, totalSeconds: body.quota_total_seconds };
+  notifyQuotaListeners();
   writeStorage({
     token: body.token,
     // renew a little early so a request never races an almost-expired token
@@ -82,4 +89,36 @@ export function getLastKnownQuota(): QuotaInfo | null {
 
 export function recordQuotaRemaining(remainingSeconds: number) {
   lastQuota = { remainingSeconds, totalSeconds: lastQuota?.totalSeconds ?? remainingSeconds };
+  notifyQuotaListeners();
+}
+
+/** Subscribes to quota updates; returns an unsubscribe function. Fires
+ * immediately with the last known value if one already exists. */
+export function subscribeToQuota(listener: (quota: QuotaInfo) => void): () => void {
+  quotaListeners.add(listener);
+  if (lastQuota) listener(lastQuota);
+  return () => quotaListeners.delete(listener);
+}
+
+/**
+ * Makes sure quota is visible to the UI as soon as the app loads, even when
+ * a still-valid token is already cached (so getToken() never re-bootstraps
+ * and would otherwise leave the user's quota unknown until their first
+ * chat/trigger turn). Safe to call every time — it's a no-op once quota is
+ * known, and doesn't touch the cached token unless there wasn't one already.
+ */
+export async function ensureQuotaKnown(): Promise<void> {
+  if (lastQuota) return;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/session`, { method: 'POST' });
+    if (!res.ok) return;
+    const body = (await res.json()) as SessionResponse;
+    lastQuota = { remainingSeconds: body.quota_remaining_seconds, totalSeconds: body.quota_total_seconds };
+    notifyQuotaListeners();
+    if (!cached || cached.expiresAt <= Date.now()) {
+      writeStorage({ token: body.token, expiresAt: Date.now() + (body.expires_in_minutes - 1) * 60_000 });
+    }
+  } catch {
+    // best-effort only — the badge just stays hidden until the first turn
+  }
 }
