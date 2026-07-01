@@ -1,17 +1,29 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import type { AllocationSlice } from '../lib/api';
 
-interface AllocationItem {
-  label: string;
-  percentage: number;
-  colorClass: string;
-}
+const GOLD_SHADES = ['bg-gold', 'bg-gold/70', 'bg-gold/40', 'bg-gold/20'];
 
 interface PortfolioSnapshotProps {
   defaultExpanded?: boolean;
+  totalValue: number;
+  changeAmount: number;
+  changePct: number;
+  allocation: AllocationSlice[];
+  loading?: boolean;
 }
 
-export default function PortfolioSnapshot({ defaultExpanded = false }: PortfolioSnapshotProps) {
+const currency = (n: number) =>
+  `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+
+export default function PortfolioSnapshot({
+  defaultExpanded = false,
+  totalValue,
+  changeAmount,
+  changePct,
+  allocation,
+  loading = false,
+}: PortfolioSnapshotProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   // Sync state with parent-triggered default changes (e.g. tablet mode auto-expansion)
@@ -19,12 +31,8 @@ export default function PortfolioSnapshot({ defaultExpanded = false }: Portfolio
     setIsExpanded(defaultExpanded);
   }, [defaultExpanded]);
 
-  const allocation: AllocationItem[] = [
-    { label: 'Equity', percentage: 45, colorClass: 'bg-gold' },
-    { label: 'Debt / FD', percentage: 30, colorClass: 'bg-gold/70' },
-    { label: 'ETF', percentage: 15, colorClass: 'bg-gold/40' },
-    { label: 'Hybrid', percentage: 10, colorClass: 'bg-gold/20' },
-  ];
+  const isPositive = changeAmount >= 0;
+  const changeColorClass = isPositive ? 'text-sage' : 'text-danger';
 
   return (
     <div className="relative overflow-hidden bg-ink-raised border border-ink-border rounded-2xl shadow-md select-none transition-all duration-300">
@@ -34,7 +42,7 @@ export default function PortfolioSnapshot({ defaultExpanded = false }: Portfolio
       </div>
 
       {/* Main Strip (Tappable Header) */}
-      <button 
+      <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full flex items-center justify-between px-4 py-3.5 focus:outline-none cursor-pointer text-left group"
@@ -43,24 +51,30 @@ export default function PortfolioSnapshot({ defaultExpanded = false }: Portfolio
           <span className="font-body text-[8.5px] tracking-widest text-paper-dim uppercase font-semibold">
             Portfolio Value
           </span>
-          <div className="flex items-baseline gap-2 mt-0.5">
-            <span className="font-tabular-nums text-base font-semibold text-paper group-hover:text-gold transition-colors duration-200">
-              ₹8,42,600
-            </span>
-            <span className="font-tabular-nums text-xs font-semibold text-sage">
-              +₹3,240 (+0.38%)
-            </span>
-          </div>
+          {loading ? (
+            <div className="h-4 w-32 mt-1.5 rounded bg-ink-border/50 animate-pulse" />
+          ) : (
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <span className="font-tabular-nums text-base font-semibold text-paper group-hover:text-gold transition-colors duration-200">
+                {currency(totalValue)}
+              </span>
+              <span className={`font-tabular-nums text-xs font-semibold ${changeColorClass}`}>
+                {isPositive ? '+' : ''}
+                {currency(changeAmount)} ({isPositive ? '+' : ''}
+                {changePct.toFixed(2)}%)
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Expand/Collapse Chevron */}
         <div className="p-1 text-paper-dim/60 group-hover:text-gold transition-colors duration-200">
-          <motion.svg 
-            xmlns="http://www.w3.org/2000/svg" 
-            fill="none" 
-            viewBox="0 0 24 24" 
-            strokeWidth={2.5} 
-            stroke="currentColor" 
+          <motion.svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2.5}
+            stroke="currentColor"
             className="w-3.5 h-3.5"
             animate={{ rotate: isExpanded ? 180 : 0 }}
             transition={{ duration: 0.3 }}
@@ -72,12 +86,12 @@ export default function PortfolioSnapshot({ defaultExpanded = false }: Portfolio
 
       {/* Expandable Asset Allocation Panel */}
       <AnimatePresence initial={false}>
-        {isExpanded && (
+        {isExpanded && !loading && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
+            animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
             className="overflow-hidden"
           >
             <div className="px-4 pb-4 pt-1.5 border-t border-ink-border/40 space-y-3">
@@ -85,18 +99,18 @@ export default function PortfolioSnapshot({ defaultExpanded = false }: Portfolio
                 <span>Asset Class</span>
                 <span>Allocation</span>
               </div>
-              
+
               <div className="space-y-2.5">
                 {allocation.map((item, index) => (
-                  <div key={index} className="space-y-1">
+                  <div key={item.category} className="space-y-1">
                     <div className="flex justify-between font-body text-[11px] text-paper-dim">
-                      <span className="font-medium text-paper/85">{item.label}</span>
-                      <span className="font-tabular-nums">{item.percentage}%</span>
+                      <span className="font-medium text-paper/85">{item.category}</span>
+                      <span className="font-tabular-nums">{item.weight_pct.toFixed(0)}%</span>
                     </div>
                     <div className="h-[2px] bg-ink/65 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full rounded-full ${item.colorClass}`} 
-                        style={{ width: `${item.percentage}%` }}
+                      <div
+                        className={`h-full rounded-full ${GOLD_SHADES[index % GOLD_SHADES.length]}`}
+                        style={{ width: `${item.weight_pct}%` }}
                       />
                     </div>
                   </div>

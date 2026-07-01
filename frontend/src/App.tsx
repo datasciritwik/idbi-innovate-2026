@@ -1,66 +1,129 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import Avatar from './components/Avatar';
 import PortfolioSnapshot from './components/PortfolioSnapshot';
 import SpokenLine from './components/SpokenLine';
 import QuickActions from './components/QuickActions';
 import InputBar from './components/InputBar';
+import UserSwitcher from './components/UserSwitcher';
+import { api, ApiError } from './lib/api';
+import type { PortfolioSnapshot as PortfolioSnapshotData, UserSummary } from './lib/api';
+
+const emptyPortfolio: PortfolioSnapshotData = {
+  user_id: '',
+  total_value: 0,
+  change_amount: 0,
+  change_pct: 0,
+  allocation: [],
+};
 
 export default function App() {
   // Toggle device mockup modes
   const [deviceMode, setDeviceMode] = useState<'mobile' | 'tablet'>('mobile');
 
+  // Demo user roster + current selection
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [portfolio, setPortfolio] = useState<PortfolioSnapshotData>(emptyPortfolio);
+  const [portfolioLoading, setPortfolioLoading] = useState(true);
+
   // Wren's active spoken response line
-  const [wrenText, setWrenText] = useState(
-    "Hello. I've completed a refresh of your transactions. Your portfolio is holding steady, and I'm ready whenever you want to model a decision."
-  );
-  
+  const [wrenText, setWrenText] = useState('Connecting to your account...');
+
   // User's voice/query flash text
   const [userQuery, setUserQuery] = useState<string>('');
-  
+
   // Concierge processing states
-  const [statusText, setStatusText] = useState("Here whenever you need me");
+  const [statusText, setStatusText] = useState('Waking up...');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const triggerResponse = (actionId: string, customText?: string) => {
-    if (isProcessing) return;
+  // Fetch a user's portfolio and, optionally, greet them with it.
+  const loadUser = async (userId: string, { greet = true }: { greet?: boolean } = {}) => {
+    setPortfolioLoading(true);
+    try {
+      const [userProfile, snapshot] = await Promise.all([api.getUser(userId), api.getPortfolio(userId)]);
+      setPortfolio(snapshot);
+      if (greet) {
+        const direction = snapshot.change_amount >= 0 ? 'up' : 'down';
+        setWrenText(
+          `Hello, ${userProfile.name.split(' ')[0]}. Your portfolio is at ₹${snapshot.total_value.toLocaleString(
+            'en-IN',
+          )}, ${direction} ${Math.abs(snapshot.change_pct).toFixed(2)}% today. I'm ready whenever you want to model a decision.`,
+        );
+      }
+    } catch (err) {
+      setWrenText(err instanceof ApiError ? err.message : 'Could not load this account.');
+    } finally {
+      setPortfolioLoading(false);
+      setStatusText('Here whenever you need me');
+    }
+  };
 
-    let queryText = "";
-    let nextResponseText = "";
-    let pendingStatus = "Analyzing...";
+  // Load the demo roster once, then greet the first user
+  useEffect(() => {
+    api
+      .listUsers()
+      .then(async (list) => {
+        setUsers(list);
+        if (list.length > 0) {
+          setSelectedUserId(list[0].user_id);
+          await loadUser(list[0].user_id);
+        }
+      })
+      .catch((err) => {
+        setWrenText(err instanceof ApiError ? err.message : 'Something went wrong loading demo users.');
+        setStatusText('Offline');
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    if (actionId === 'raise') {
-      queryText = "Got a raise 🎉";
-      pendingStatus = "Analyzing salary adjustments...";
-      nextResponseText = "Incredible news! A salary bump is the perfect time to accelerate your wealth. If we redirect 50% of your net increase to your Emerging Opportunities SIP, we can hit your house down-payment goal 7 months early. Shall we set that up?";
-    } else if (actionId === 'medical') {
-      queryText = "Unexpected medical expense";
-      pendingStatus = "Reviewing liquidity options...";
-      nextResponseText = "I'm sorry to hear that. Let's make room. Your Liquid Fund holds ₹1.25L, which is fully accessible in 24 hours without penalty. I recommend pulling from there first to avoid disrupting your equity compounding.";
-    } else if (actionId === 'afford') {
-      queryText = "Can I afford this?";
-      pendingStatus = "Running afford scenarios...";
-      nextResponseText = "Tell me the amount or what you're planning. I'll compare it against your cashflow projection and emergency reserves to see how it fits.";
-    } else if (actionId === 'custom' && customText) {
-      queryText = customText;
-      pendingStatus = "Processing request...";
-      nextResponseText = "I am currently running in offline mockup mode, but once we connect the personalization engine, I will analyze your UPI data and transactions to answer this directly.";
+  const handleUserSelect = (userId: string) => {
+    setSelectedUserId(userId);
+    setWrenText('Switching accounts...');
+    loadUser(userId);
+  };
+
+  const triggerResponse = async (actionId: string, customText?: string) => {
+    if (isProcessing || !selectedUserId) return;
+
+    // Life-event triggers always play out on their scripted demo user in the
+    // backend data — jump the whole widget over so the numbers on screen
+    // match the story Wren is telling.
+    if (actionId === 'raise' || actionId === 'medical') {
+      setUserQuery(actionId === 'raise' ? 'Got a raise 🎉' : 'Unexpected medical expense');
+      setIsProcessing(true);
+      setStatusText(actionId === 'raise' ? 'Analyzing salary adjustments...' : 'Reviewing liquidity options...');
+      try {
+        const result = await api.fireTrigger(actionId);
+        setSelectedUserId(result.user_id);
+        await loadUser(result.user_id, { greet: false });
+        setWrenText(result.reply);
+      } catch (err) {
+        setWrenText(err instanceof ApiError ? err.message : 'Something went wrong running that scenario.');
+      } finally {
+        setUserQuery('');
+        setIsProcessing(false);
+        setStatusText('Here whenever you need me');
+      }
+      return;
     }
 
-    if (!queryText) return;
+    const message = actionId === 'afford' ? 'Can I afford this?' : customText;
+    if (!message) return;
 
-    // Phase 1: Flash User Query immediately and start orb thinking
-    setUserQuery(queryText);
+    setUserQuery(message);
     setIsProcessing(true);
-    setStatusText(pendingStatus);
-
-    // Phase 2: After 1.5 seconds, fade user query and swap Wren's spoken line
-    setTimeout(() => {
+    setStatusText('Processing request...');
+    try {
+      const { reply } = await api.sendChat(selectedUserId, message);
+      setWrenText(reply);
+    } catch (err) {
+      setWrenText(err instanceof ApiError ? err.message : 'Something went wrong reaching Wren.');
+    } finally {
       setUserQuery('');
-      setWrenText(nextResponseText);
       setIsProcessing(false);
-      setStatusText("Here whenever you need me");
-    }, 1500);
+      setStatusText('Here whenever you need me');
+    }
   };
 
   const handleSend = (text: string) => {
@@ -79,8 +142,8 @@ export default function App() {
       transition: {
         staggerChildren: 0.08,
         delayChildren: 0.1,
-      }
-    }
+      },
+    },
   };
 
   const itemVariants = {
@@ -90,9 +153,9 @@ export default function App() {
       y: 0,
       transition: {
         duration: 0.6,
-        ease: [0.16, 1, 0.3, 1] as const
-      }
-    }
+        ease: [0.16, 1, 0.3, 1] as const,
+      },
+    },
   };
 
   return (
@@ -100,42 +163,51 @@ export default function App() {
       {/* Noise texture overlay */}
       <div className="noise-overlay absolute inset-0 z-0" />
 
-      {/* Device Switcher Control Bar - Moved to Top-Right */}
-      <div className="absolute top-6 right-6 z-30 flex items-center bg-ink-raised/65 border border-ink-border px-1.5 py-1.5 rounded-full shadow-2xl backdrop-blur-md">
-        <button
-          type="button"
-          onClick={() => setDeviceMode('mobile')}
-          className={`flex items-center gap-1.5 text-xs font-body font-medium px-4 py-2 rounded-full transition-all duration-300 cursor-pointer focus:outline-none ${
-            deviceMode === 'mobile'
-              ? 'bg-gold text-ink font-semibold shadow-[0_4px_12px_rgba(212,175,106,0.35)]'
-              : 'text-paper-dim hover:text-paper'
-          }`}
-        >
-          {/* Phone Icon */}
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-6 18.75h12" />
-          </svg>
-          Mobile
-        </button>
-        <button
-          type="button"
-          onClick={() => setDeviceMode('tablet')}
-          className={`flex items-center gap-1.5 text-xs font-body font-medium px-4 py-2 rounded-full transition-all duration-300 cursor-pointer focus:outline-none ${
-            deviceMode === 'tablet'
-              ? 'bg-gold text-ink font-semibold shadow-[0_4px_12px_rgba(212,175,106,0.35)]'
-              : 'text-paper-dim hover:text-paper'
-          }`}
-        >
-          {/* Tablet Icon */}
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25h6m3 2.25H6a2.25 2.25 0 0 1-2.25-2.25V5.25A2.25 2.25 0 0 1 6 3h12a2.25 2.25 0 0 1 2.25 2.25v12a2.25 2.25 0 0 1-2.25 2.25Z" />
-          </svg>
-          Tablet
-        </button>
+      {/* Top-right control bar: user switcher + device mode */}
+      <div className="absolute top-6 right-6 z-30 flex items-center gap-3">
+        <UserSwitcher
+          users={users}
+          selectedUserId={selectedUserId}
+          onSelect={handleUserSelect}
+          disabled={isProcessing}
+        />
+
+        <div className="flex items-center bg-ink-raised/65 border border-ink-border px-1.5 py-1.5 rounded-full shadow-2xl backdrop-blur-md">
+          <button
+            type="button"
+            onClick={() => setDeviceMode('mobile')}
+            className={`flex items-center gap-1.5 text-xs font-body font-medium px-4 py-2 rounded-full transition-all duration-300 cursor-pointer focus:outline-none ${
+              deviceMode === 'mobile'
+                ? 'bg-gold text-ink font-semibold shadow-[0_4px_12px_rgba(212,175,106,0.35)]'
+                : 'text-paper-dim hover:text-paper'
+            }`}
+          >
+            {/* Phone Icon */}
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-6 18.75h12" />
+            </svg>
+            Mobile
+          </button>
+          <button
+            type="button"
+            onClick={() => setDeviceMode('tablet')}
+            className={`flex items-center gap-1.5 text-xs font-body font-medium px-4 py-2 rounded-full transition-all duration-300 cursor-pointer focus:outline-none ${
+              deviceMode === 'tablet'
+                ? 'bg-gold text-ink font-semibold shadow-[0_4px_12px_rgba(212,175,106,0.35)]'
+                : 'text-paper-dim hover:text-paper'
+            }`}
+          >
+            {/* Tablet Icon */}
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25h6m3 2.25H6a2.25 2.25 0 0 1-2.25-2.25V5.25A2.25 2.25 0 0 1 6 3h12a2.25 2.25 0 0 1 2.25 2.25v12a2.25 2.25 0 0 1-2.25 2.25Z" />
+            </svg>
+            Tablet
+          </button>
+        </div>
       </div>
-      
+
       {/* Widget Container - Phone or Tablet Mockup Frame */}
-      <motion.div 
+      <motion.div
         layout
         transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] as const }}
         className={`bg-ink/95 border border-ink-border relative z-10 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] flex flex-col p-6 overflow-hidden transition-all duration-500 ${
@@ -152,15 +224,13 @@ export default function App() {
         )}
 
         {/* Inner layout container with adaptive flex directions */}
-        <motion.div 
+        <motion.div
           layout
           variants={containerVariants}
           initial="hidden"
           animate="show"
           className={`flex h-full z-10 ${
-            deviceMode === 'mobile'
-              ? 'flex-col pt-4 justify-between gap-3'
-              : 'flex-row items-center justify-between gap-6'
+            deviceMode === 'mobile' ? 'flex-col pt-4 justify-between gap-3' : 'flex-row items-center justify-between gap-6'
           }`}
         >
           {deviceMode === 'mobile' ? (
@@ -172,7 +242,14 @@ export default function App() {
               </motion.div>
 
               <motion.div layout variants={itemVariants} className="flex-none">
-                <PortfolioSnapshot defaultExpanded={false} />
+                <PortfolioSnapshot
+                  defaultExpanded={false}
+                  totalValue={portfolio.total_value}
+                  changeAmount={portfolio.change_amount}
+                  changePct={portfolio.change_pct}
+                  allocation={portfolio.allocation}
+                  loading={portfolioLoading}
+                />
               </motion.div>
 
               <div className="flex flex-col gap-3 flex-none">
@@ -197,9 +274,16 @@ export default function App() {
               {/* Right Column: Expanded Portfolio Snapshot, Actions, Input */}
               <motion.div layout variants={itemVariants} className="w-[380px] flex-none h-full flex flex-col justify-center gap-5 pl-8">
                 <div className="w-full">
-                  <PortfolioSnapshot defaultExpanded={true} />
+                  <PortfolioSnapshot
+                    defaultExpanded={true}
+                    totalValue={portfolio.total_value}
+                    changeAmount={portfolio.change_amount}
+                    changePct={portfolio.change_pct}
+                    allocation={portfolio.allocation}
+                    loading={portfolioLoading}
+                  />
                 </div>
-                
+
                 <div className="overflow-visible w-full">
                   <QuickActions onActionClick={handleAction} disabled={isProcessing} />
                 </div>
