@@ -9,6 +9,11 @@ from .sessions import decode_session_token
 
 def get_client_ip(request: Request) -> str:
     if config.TRUST_PROXY_HEADERS:
+        # Set by Cloudflare's edge itself (can't be spoofed by the client past
+        # it), so prefer it over the more generic X-Forwarded-For.
+        cf_ip = request.headers.get("cf-connecting-ip")
+        if cf_ip:
+            return cf_ip.strip()
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
             return forwarded.split(",")[0].strip()

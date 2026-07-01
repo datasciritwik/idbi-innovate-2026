@@ -1,0 +1,13 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+data/*.db
+
+# The dataset is generated and kept out of the public repo (see root
+# .gitignore), but it must still be included in the FastAPI Cloud upload —
+# un-ignore it here.
+!data/output/
+!data/output/**

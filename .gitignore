@@ -8,6 +8,7 @@ node_modules/
 
 # Generated synthetic data — baked into backend at deploy time, not versioned
 data/output/
+backend/data/output/
 
 # Internal planning doc — not for the public repo
 idbi-innovate-2026-submission-plan.md
