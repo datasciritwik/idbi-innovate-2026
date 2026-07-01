@@ -6,9 +6,15 @@ import SpokenLine from './components/SpokenLine';
 import QuickActions from './components/QuickActions';
 import InputBar from './components/InputBar';
 import QuotaBadge from './components/QuotaBadge';
+import TabBar from './components/TabBar';
+import AccountsTab from './components/AccountsTab';
+import InvestTab from './components/InvestTab';
+import GoalsTab from './components/GoalsTab';
+
+export type TabId = 'home' | 'accounts' | 'invest' | 'goals';
 type ConnectionStatus = 'idle' | 'connecting' | 'ready' | 'error';
 import { api, ApiError } from './lib/api';
-import type { LanguageInfo, PortfolioSnapshot as PortfolioSnapshotData, UserSummary, VoiceGender } from './lib/api';
+import type { LanguageInfo, PortfolioSnapshot as PortfolioSnapshotData, UserSummary, VoiceGender, Transaction, Recommendation, UserProfile } from './lib/api';
 import { enqueueAudioChunk, resetAudioQueue } from './lib/audio';
 import { startVoiceSession, stopVoiceSession } from './lib/voice';
 import { ensureQuotaKnown, subscribeToQuota } from './lib/session';
@@ -20,11 +26,22 @@ const emptyPortfolio: PortfolioSnapshotData = {
   change_amount: 0,
   change_pct: 0,
   allocation: [],
+  holdings: [],
 };
 
 export default function App() {
   // Toggle device mockup modes
   const [deviceMode, setDeviceMode] = useState<'mobile' | 'tablet'>('mobile');
+
+  // Active navigation tab
+  const [activeTab, setActiveTab] = useState<TabId>('home');
+
+  // Cache/lazy loading states for tabs
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[] | null>(null);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
+  const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
+  const [recommendationLoading, setRecommendationLoading] = useState(false);
 
   // Demo user roster + current selection
   const [users, setUsers] = useState<UserSummary[]>([]);
@@ -168,13 +185,16 @@ export default function App() {
   // Fetch a user's portfolio and, optionally, greet them with it.
   const loadUser = async (userId: string, { greet = true }: { greet?: boolean } = {}) => {
     setPortfolioLoading(true);
+    setTransactions(null);
+    setRecommendation(null);
     try {
-      const [userProfile, snapshot] = await Promise.all([api.getUser(userId), api.getPortfolio(userId)]);
+      const [profile, snapshot] = await Promise.all([api.getUser(userId), api.getPortfolio(userId)]);
+      setUserProfile(profile);
       setPortfolio(snapshot);
       if (greet) {
         const direction = snapshot.change_amount >= 0 ? 'up' : 'down';
         setWrenText(
-          `Hello, ${userProfile.name.split(' ')[0]}. Your portfolio is at ₹${snapshot.total_value.toLocaleString(
+          `Hello, ${profile.name.split(' ')[0]}. Your portfolio is at ₹${snapshot.total_value.toLocaleString(
             'en-IN',
           )}, ${direction} ${Math.abs(snapshot.change_pct).toFixed(2)}% today. I'm ready whenever you want to model a decision.`,
         );
@@ -186,6 +206,26 @@ export default function App() {
       setStatusText('Here whenever you need me');
     }
   };
+
+  useEffect(() => {
+    if (activeTab === 'accounts' && !transactions && selectedUserId && !transactionsLoading) {
+      setTransactionsLoading(true);
+      api.getTransactions(selectedUserId, 10)
+        .then(setTransactions)
+        .catch(() => setTransactions([]))
+        .finally(() => setTransactionsLoading(false));
+    }
+  }, [activeTab, transactions, selectedUserId, transactionsLoading]);
+
+  useEffect(() => {
+    if (activeTab === 'goals' && !recommendation && selectedUserId && !recommendationLoading) {
+      setRecommendationLoading(true);
+      api.getRecommendation(selectedUserId)
+        .then(setRecommendation)
+        .catch(() => setRecommendation(null))
+        .finally(() => setRecommendationLoading(false));
+    }
+  }, [activeTab, recommendation, selectedUserId, recommendationLoading]);
 
   // Load the demo roster once, then greet the first user
   useEffect(() => {
@@ -568,10 +608,10 @@ export default function App() {
           <motion.div
             layout
             transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] as const }}
-            className={`bg-ink/95 border border-ink-border relative shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] flex flex-col p-6 overflow-hidden transition-all duration-500 ${
+            className={`bg-ink/95 border border-ink-border relative shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] flex flex-col pt-6 px-6 pb-0 overflow-hidden transition-all duration-500 ${
               deviceMode === 'mobile'
                 ? 'w-[395px] h-[844px] rounded-[32px] justify-between'
-                : 'w-full max-w-[1080px] h-[720px] rounded-[28px] justify-center'
+                : 'w-full max-w-[1080px] h-[720px] rounded-[28px] justify-between'
             }`}
           >
             {/* Notch header for mobile phone format */}
@@ -588,78 +628,102 @@ export default function App() {
               </div>
             )}
 
-            {/* Inner responsive layout container */}
-            <motion.div
-              layout
-              variants={containerVariants}
-              initial="hidden"
-              animate="show"
-              className={`flex h-full z-10 ${
-                deviceMode === 'mobile' ? 'flex-col pt-4 justify-between gap-3' : 'flex-row items-center justify-between gap-6'
-              }`}
-            >
-              {deviceMode === 'mobile' ? (
-                <>
-                  {/* Mobile Layout: Stacked concierge sections */}
-                  <motion.div layout variants={itemVariants} className="flex flex-col items-center justify-center flex-1 min-h-0">
-                    <Avatar statusText={statusText} isProcessing={isProcessing} />
-                    <SpokenLine wrenText={wrenText} userQuery={userQuery} />
-                  </motion.div>
+            {/* Tab content display area */}
+            <div className="flex-1 min-h-0 w-full flex flex-col overflow-y-auto custom-scrollbar mt-4 mb-1">
+              {activeTab === 'home' ? (
+                <motion.div
+                  layout
+                  variants={containerVariants}
+                  initial="hidden"
+                  animate="show"
+                  className={`flex h-full z-10 ${
+                    deviceMode === 'mobile' ? 'flex-col pt-4 justify-between gap-3' : 'flex-row items-center justify-between gap-6'
+                  }`}
+                >
+                  {deviceMode === 'mobile' ? (
+                    <>
+                      {/* Mobile Layout: Stacked concierge sections */}
+                      <motion.div layout variants={itemVariants} className="flex flex-col items-center justify-center flex-1 min-h-0">
+                        <Avatar statusText={statusText} isProcessing={isProcessing} />
+                        <SpokenLine wrenText={wrenText} userQuery={userQuery} />
+                      </motion.div>
 
-                  <motion.div layout variants={itemVariants} className="flex-none">
-                    <PortfolioSnapshot
-                      defaultExpanded={false}
-                      totalValue={portfolio.total_value}
-                      changeAmount={portfolio.change_amount}
-                      changePct={portfolio.change_pct}
-                      allocation={portfolio.allocation}
-                      loading={portfolioLoading}
-                    />
-                  </motion.div>
+                      <motion.div layout variants={itemVariants} className="flex-none">
+                        <PortfolioSnapshot
+                          defaultExpanded={false}
+                          totalValue={portfolio.total_value}
+                          changeAmount={portfolio.change_amount}
+                          changePct={portfolio.change_pct}
+                          allocation={portfolio.allocation}
+                          loading={portfolioLoading}
+                        />
+                      </motion.div>
 
-                  <div className="flex flex-col gap-3 flex-none">
-                    <motion.div layout variants={itemVariants} className="overflow-visible">
-                      <QuickActions onActionClick={handleAction} disabled={isProcessing} />
-                    </motion.div>
+                      <div className="flex flex-col gap-3 flex-none">
+                        <motion.div layout variants={itemVariants} className="overflow-visible">
+                          <QuickActions onActionClick={handleAction} disabled={isProcessing} />
+                        </motion.div>
 
-                    <motion.div layout variants={itemVariants} className="mb-1">
-                      <InputBar onSend={handleSend} disabled={isProcessing} />
-                    </motion.div>
-                  </div>
-                </>
+                        <motion.div layout variants={itemVariants} className="mb-1">
+                          <InputBar onSend={handleSend} disabled={isProcessing} />
+                        </motion.div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Tablet Layout: Split Pane Dashboard */}
+                      {/* Left Column: Avatar & Spoken Response zone */}
+                      <motion.div layout variants={itemVariants} className="flex-1 h-full flex flex-col items-center justify-center border-r border-ink-border/30 pr-8">
+                        <Avatar statusText={statusText} isProcessing={isProcessing} />
+                        <SpokenLine wrenText={wrenText} userQuery={userQuery} />
+                      </motion.div>
+
+                      {/* Right Column: Expanded Portfolio Snapshot, Actions, Input */}
+                      <motion.div layout variants={itemVariants} className="w-[380px] flex-none h-full flex flex-col justify-center gap-5 pl-8">
+                        <div className="w-full">
+                          <PortfolioSnapshot
+                            defaultExpanded={true}
+                            totalValue={portfolio.total_value}
+                            changeAmount={portfolio.change_amount}
+                            changePct={portfolio.change_pct}
+                            allocation={portfolio.allocation}
+                            loading={portfolioLoading}
+                          />
+                        </div>
+
+                        <div className="overflow-visible w-full">
+                          <QuickActions onActionClick={handleAction} disabled={isProcessing} />
+                        </div>
+
+                        <div className="mb-1 w-full">
+                          <InputBar onSend={handleSend} disabled={isProcessing} />
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </motion.div>
+              ) : activeTab === 'accounts' ? (
+                <AccountsTab
+                  currentSavings={userProfile?.current_savings ?? 0}
+                  transactions={transactions}
+                  loading={transactionsLoading}
+                />
+              ) : activeTab === 'invest' ? (
+                <InvestTab
+                  portfolio={portfolio}
+                  loading={portfolioLoading}
+                />
               ) : (
-                <>
-                  {/* Tablet Layout: Split Pane Dashboard */}
-                  {/* Left Column: Avatar & Spoken Response zone */}
-                  <motion.div layout variants={itemVariants} className="flex-1 h-full flex flex-col items-center justify-center border-r border-ink-border/30 pr-8">
-                    <Avatar statusText={statusText} isProcessing={isProcessing} />
-                    <SpokenLine wrenText={wrenText} userQuery={userQuery} />
-                  </motion.div>
-
-                  {/* Right Column: Expanded Portfolio Snapshot, Actions, Input */}
-                  <motion.div layout variants={itemVariants} className="w-[380px] flex-none h-full flex flex-col justify-center gap-5 pl-8">
-                    <div className="w-full">
-                      <PortfolioSnapshot
-                        defaultExpanded={true}
-                        totalValue={portfolio.total_value}
-                        changeAmount={portfolio.change_amount}
-                        changePct={portfolio.change_pct}
-                        allocation={portfolio.allocation}
-                        loading={portfolioLoading}
-                      />
-                    </div>
-
-                    <div className="overflow-visible w-full">
-                      <QuickActions onActionClick={handleAction} disabled={isProcessing} />
-                    </div>
-
-                    <div className="mb-1 w-full">
-                      <InputBar onSend={handleSend} disabled={isProcessing} />
-                    </div>
-                  </motion.div>
-                </>
+                <GoalsTab
+                  userProfile={userProfile}
+                  recommendation={recommendation}
+                  loading={recommendationLoading}
+                />
               )}
-            </motion.div>
+            </div>
+
+            {/* Bottom Tab Navigation Bar */}
+            <TabBar active={activeTab} onChange={setActiveTab} deviceMode={deviceMode} />
           </motion.div>
         </div>
 

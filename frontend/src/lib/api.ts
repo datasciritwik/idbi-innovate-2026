@@ -29,6 +29,12 @@ export interface UserProfile extends UserSummary {
   dependents: number;
   existing_holdings: Record<string, number>;
   features: Features;
+  current_savings: number;
+  tenure_with_bank_years: number;
+  marital_status?: string;
+  monthly_expenses_estimate?: number;
+  investment_experience_years?: number;
+  risk_score?: number;
 }
 
 export interface AllocationSlice {
@@ -37,13 +43,33 @@ export interface AllocationSlice {
   weight_pct: number;
 }
 
+export interface HoldingDetail {
+  instrument_id: string;
+  value: number;
+  name: string;
+  type: string;
+  risk_level: string;
+}
+
 export interface PortfolioSnapshot {
   user_id: string;
   total_value: number;
   change_amount: number;
   change_pct: number;
   allocation: AllocationSlice[];
+  holdings: HoldingDetail[];
 }
+
+export interface Transaction {
+  date: string;
+  category: string;
+  type: 'Credit' | 'Debit';
+  amount: number;
+  merchant: string;
+  channel: string;
+  balance_after: number;
+}
+
 
 export interface RecommendedAllocation {
   instrument_id: string;
@@ -316,6 +342,8 @@ export const api = {
       3,
       signal,
     ),
+  getTransactions: (userId: string, limit = 10) =>
+    request<Transaction[]>(`/api/users/${userId}/transactions?limit=${limit}`),
   listTriggers: () => request<TriggerInfo[]>('/api/triggers'),
   streamTrigger: (
     triggerType: string,

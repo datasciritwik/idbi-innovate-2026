@@ -2,9 +2,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import config
-from .routers import chat, portfolio, recommendations, session, triggers, users, warmup
+from .routers import chat, portfolio, recommendations, session, transactions, triggers, users, warmup
 
-app = FastAPI(title="Vitta Personalization Engine", version="0.1.0")
+app = FastAPI(
+    title="Vitta Personalization Engine", 
+    version="0.1.0",
+    docs_url = None,
+    redoc_url = None,
+    openapi_url= None
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -17,6 +23,7 @@ app.add_middleware(
 app.include_router(session.router)
 app.include_router(users.router)
 app.include_router(portfolio.router)
+app.include_router(transactions.router)
 app.include_router(recommendations.router)
 app.include_router(chat.router)
 app.include_router(triggers.router)

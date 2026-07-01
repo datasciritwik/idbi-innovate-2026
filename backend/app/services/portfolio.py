@@ -40,7 +40,16 @@ def get_portfolio_snapshot(user_id: str) -> dict:
         "change_amount": round(change_amount, 2),
         "change_pct": change_pct,
         "allocation": allocation,
-        "holdings": [
-            {"instrument_id": iid, "value": round(v, 2)} for iid, v in holdings.items()
-        ],
+        "holdings": [_holding_detail(store, iid, v) for iid, v in holdings.items()],
+    }
+
+
+def _holding_detail(store, instrument_id: str, value: float) -> dict:
+    instrument = store.get_instrument(instrument_id)
+    return {
+        "instrument_id": instrument_id,
+        "value": round(value, 2),
+        "name": instrument["name"] if instrument else instrument_id,
+        "type": instrument["type"] if instrument else None,
+        "risk_level": instrument["risk_level"] if instrument else None,
     }
