@@ -13,6 +13,13 @@ DATA_DIR = Path(os.getenv("DATA_DIR", str(BACKEND_DIR / ".." / "data" / "output"
 # graceful 503 in the meantime.
 LLM_ENDPOINT_URL = os.getenv("LLM_ENDPOINT_URL", "")
 
+# Per-session conversation memory (SQLite), replayed into the LLM context so
+# multi-turn chat isn't stateless. Keyed by the anonymous session_id from
+# security/sessions.py, not by user_id — each browser session gets its own
+# short history regardless of which demo user it's currently viewing.
+MEMORY_DB_PATH = Path(os.getenv("MEMORY_DB_PATH", str(BACKEND_DIR / "data" / "memory.db"))).resolve()
+MEMORY_TURN_LIMIT = int(os.getenv("MEMORY_TURN_LIMIT", "6"))
+
 ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",") if o.strip()
 ]

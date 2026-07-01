@@ -13,6 +13,7 @@ from fastapi import HTTPException
 
 from .. import config
 from ..data_store import get_store
+from . import memory
 from .allocation import generate_savings_plan
 from .features import compute_features
 from .portfolio import get_portfolio_snapshot
@@ -99,10 +100,21 @@ def _call(user_prompt: str) -> str:
     return response.json()["text"].strip()
 
 
-def chat(user_id: str, message: str) -> str:
+def chat(user_id: str, message: str, session_id: str) -> str:
     context = build_context(user_id)
-    prompt = f"CONTEXT:\n{json.dumps(context, default=str)}\n\nCUSTOMER QUESTION:\n{message}"
-    return _call(prompt)
+    history = memory.get_recent_turns(session_id)
+    history_block = (
+        "\n".join(f"{turn['role'].upper()}: {turn['content']}" for turn in history) or "(no earlier turns)"
+    )
+    prompt = (
+        f"CONTEXT:\n{json.dumps(context, default=str)}\n\n"
+        f"CONVERSATION SO FAR:\n{history_block}\n\n"
+        f"CUSTOMER QUESTION:\n{message}"
+    )
+    reply = _call(prompt)
+    memory.record_turn(session_id, "customer", message)
+    memory.record_turn(session_id, "wren", reply)
+    return reply
 
 
 def trigger_reaction(trigger_type: str, before: dict, after: dict, user_id: str) -> str:
