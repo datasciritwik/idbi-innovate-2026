@@ -6,8 +6,10 @@ import SpokenLine from './components/SpokenLine';
 import QuickActions from './components/QuickActions';
 import InputBar from './components/InputBar';
 import UserSwitcher from './components/UserSwitcher';
+import VoiceSettings from './components/VoiceSettings';
 import { api, ApiError } from './lib/api';
-import type { PortfolioSnapshot as PortfolioSnapshotData, UserSummary } from './lib/api';
+import type { LanguageInfo, PortfolioSnapshot as PortfolioSnapshotData, UserSummary, VoiceGender } from './lib/api';
+import { playBase64Wav } from './lib/audio';
 
 const emptyPortfolio: PortfolioSnapshotData = {
   user_id: '',
@@ -36,6 +38,15 @@ export default function App() {
   // Concierge processing states
   const [statusText, setStatusText] = useState('Waking up...');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Voice settings: reply language + TTS voice gender
+  const [languages, setLanguages] = useState<LanguageInfo[]>([]);
+  const [language, setLanguage] = useState('en');
+  const [voiceGender, setVoiceGender] = useState<VoiceGender>('female');
+
+  useEffect(() => {
+    api.listLanguages().then(setLanguages).catch(() => setLanguages([]));
+  }, []);
 
   // Fetch a user's portfolio and, optionally, greet them with it.
   const loadUser = async (userId: string, { greet = true }: { greet?: boolean } = {}) => {
@@ -94,12 +105,13 @@ export default function App() {
       setIsProcessing(true);
       setStatusText(actionId === 'raise' ? 'Analyzing salary adjustments...' : 'Reviewing liquidity options...');
       try {
-        const result = await api.fireTrigger(actionId, (attempt, wait) =>
+        const result = await api.fireTrigger(actionId, { language, voiceGender }, (attempt, wait) =>
           setStatusText(`All concierge lines are busy — retrying in ${wait}s (attempt ${attempt})...`),
         );
         setSelectedUserId(result.user_id);
         await loadUser(result.user_id, { greet: false });
         setWrenText(result.reply);
+        if (result.audio_base64) playBase64Wav(result.audio_base64);
       } catch (err) {
         setWrenText(err instanceof ApiError ? err.message : 'Something went wrong running that scenario.');
       } finally {
@@ -117,10 +129,14 @@ export default function App() {
     setIsProcessing(true);
     setStatusText('Processing request...');
     try {
-      const { reply } = await api.sendChat(selectedUserId, message, (attempt, wait) =>
-        setStatusText(`All concierge lines are busy — retrying in ${wait}s (attempt ${attempt})...`),
+      const { reply, audio_base64 } = await api.sendChat(
+        selectedUserId,
+        message,
+        { language, voiceGender },
+        (attempt, wait) => setStatusText(`All concierge lines are busy — retrying in ${wait}s (attempt ${attempt})...`),
       );
       setWrenText(reply);
+      if (audio_base64) playBase64Wav(audio_base64);
     } catch (err) {
       setWrenText(err instanceof ApiError ? err.message : 'Something went wrong reaching Wren.');
     } finally {
@@ -173,6 +189,15 @@ export default function App() {
           users={users}
           selectedUserId={selectedUserId}
           onSelect={handleUserSelect}
+          disabled={isProcessing}
+        />
+
+        <VoiceSettings
+          languages={languages}
+          language={language}
+          onLanguageChange={setLanguage}
+          voiceGender={voiceGender}
+          onVoiceGenderChange={setVoiceGender}
           disabled={isProcessing}
         />
 

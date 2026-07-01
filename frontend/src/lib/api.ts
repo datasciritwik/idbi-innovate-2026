@@ -74,6 +74,19 @@ export interface TriggerResult {
   before: Features;
   after: Features;
   reply: string;
+  audio_base64: string | null;
+}
+
+export interface LanguageInfo {
+  code: string;
+  name: string;
+}
+
+export type VoiceGender = 'male' | 'female';
+
+export interface ChatResult {
+  reply: string;
+  audio_base64: string | null;
 }
 
 class ApiError extends Error {
@@ -150,24 +163,50 @@ async function withQueueRetry<T>(
   throw new ApiError('Ran out of retry attempts.');
 }
 
+export interface VoiceOptions {
+  language?: string;
+  voiceGender?: VoiceGender;
+}
+
 export const api = {
   listUsers: () => request<UserSummary[]>('/api/users'),
   getUser: (userId: string) => request<UserProfile>(`/api/users/${userId}`),
   getPortfolio: (userId: string) => request<PortfolioSnapshot>(`/api/users/${userId}/portfolio`),
   getRecommendation: (userId: string) => request<Recommendation>(`/api/users/${userId}/recommendation`),
-  sendChat: (userId: string, message: string, onQueued?: (attempt: number, retryAfterSeconds: number) => void) =>
+  listLanguages: () => request<LanguageInfo[]>('/api/languages'),
+  sendChat: (
+    userId: string,
+    message: string,
+    voice: VoiceOptions = {},
+    onQueued?: (attempt: number, retryAfterSeconds: number) => void,
+  ) =>
     withQueueRetry(
       () =>
-        request<{ reply: string }>(`/api/users/${userId}/chat`, {
+        request<ChatResult>(`/api/users/${userId}/chat`, {
           method: 'POST',
-          body: JSON.stringify({ message }),
+          body: JSON.stringify({
+            message,
+            language: voice.language ?? 'en',
+            voice_gender: voice.voiceGender ?? 'female',
+          }),
         }),
       onQueued,
     ),
   listTriggers: () => request<TriggerInfo[]>('/api/triggers'),
-  fireTrigger: (triggerType: string, onQueued?: (attempt: number, retryAfterSeconds: number) => void) =>
+  fireTrigger: (
+    triggerType: string,
+    voice: VoiceOptions = {},
+    onQueued?: (attempt: number, retryAfterSeconds: number) => void,
+  ) =>
     withQueueRetry(
-      () => request<TriggerResult>(`/api/triggers/${triggerType}`, { method: 'POST' }),
+      () =>
+        request<TriggerResult>(`/api/triggers/${triggerType}`, {
+          method: 'POST',
+          body: JSON.stringify({
+            language: voice.language ?? 'en',
+            voice_gender: voice.voiceGender ?? 'female',
+          }),
+        }),
       onQueued,
     ),
 };
