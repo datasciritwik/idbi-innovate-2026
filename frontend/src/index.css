@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #0b0f1a;
+  --color-ink-raised: #131826;
+  --color-ink-border: #232a3d;
+  --color-gold: #d4af6a;
+  --color-gold-soft: rgba(212, 175, 106, 0.1);
+  --color-sage: #8fae9c;
+  --color-paper: #f4efe6;
+  --color-paper-dim: #a8a3ab;
+  --color-danger: #c96a5a;
+
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body: "Public Sans", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+/* Base resets & typography */
+:root {
+  color-scheme: dark;
+  font-family: var(--font-body);
+  background-color: var(--color-ink);
+  color: var(--color-paper);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Font helpers */
+.font-display-serif {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+}
+
+.font-tabular-nums {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrollbar styling */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-border) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-ink-border);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gold);
+}
+
+/* Premium Noise & Mesh background */
+.noise-overlay {
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E");
+}
+
+.radial-mesh {
+  background: 
+    radial-gradient(circle at 50% -10%, rgba(212, 175, 106, 0.08) 0%, transparent 60%),
+    radial-gradient(circle at 10% 80%, rgba(143, 174, 156, 0.04) 0%, transparent 40%),
+    #0b0f1a;
+}
