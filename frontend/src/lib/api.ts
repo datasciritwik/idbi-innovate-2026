@@ -67,14 +67,12 @@ export interface TriggerInfo {
   user_id: string;
 }
 
-export interface TriggerResult {
+export interface TriggerMeta {
   trigger_type: string;
   user_id: string;
   trigger_date: string;
   before: Features;
   after: Features;
-  reply: string;
-  audio_base64: string | null;
 }
 
 export interface LanguageInfo {
@@ -84,9 +82,16 @@ export interface LanguageInfo {
 
 export type VoiceGender = 'male' | 'female';
 
-export interface ChatResult {
-  reply: string;
-  audio_base64: string | null;
+export interface StreamHandlers {
+  onMeta?: (meta: TriggerMeta) => void;
+  onTranscript?: (text: string) => void;
+  onTextDelta?: (text: string) => void;
+  onAudioChunk?: (base64: string, index: number) => void;
+}
+
+export interface WarmupResult {
+  llm_ready: boolean;
+  tts_ready: boolean;
 }
 
 class ApiError extends Error {
@@ -163,6 +168,106 @@ async function withQueueRetry<T>(
   throw new ApiError('Ran out of retry attempts.');
 }
 
+/**
+ * Reads a newline-delimited-JSON event stream (chat/triggers) and dispatches
+ * each event to the matching handler as it arrives, instead of waiting for
+ * the whole response — the caller sees text and audio incrementally.
+ */
+async function streamRequest(
+  path: string,
+  body: Record<string, unknown>,
+  handlers: StreamHandlers,
+  signal?: AbortSignal,
+  _retriedAfter401 = false,
+): Promise<void> {
+  const token = await getToken();
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return;
+    throw new ApiError(
+      `Can't reach the personalization engine — is the backend running at ${API_BASE_URL}?`,
+    );
+  }
+
+  if (res.status === 401 && !_retriedAfter401) {
+    invalidateToken();
+    return streamRequest(path, body, handlers, signal, true);
+  }
+
+  if (!res.ok || !res.body) {
+    let detail = res.statusText;
+    try {
+      const errBody = await res.json();
+      detail = errBody.detail ?? detail;
+    } catch {
+      // response wasn't JSON; keep statusText
+    }
+    const retryAfter = res.headers.get('Retry-After');
+    throw new ApiError(detail, res.status, retryAfter ? Number(retryAfter) : undefined);
+  }
+
+  const quotaHeader = res.headers.get('X-Quota-Remaining-Seconds');
+  if (quotaHeader) recordQuotaRemaining(Number(quotaHeader));
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let newlineIdx: number;
+      while ((newlineIdx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, newlineIdx).trim();
+        buffer = buffer.slice(newlineIdx + 1);
+        if (!line) continue;
+        const event = JSON.parse(line);
+        switch (event.type) {
+          case 'transcript':
+            handlers.onTranscript?.(event.text);
+            break;
+          case 'text_delta':
+            handlers.onTextDelta?.(event.text);
+            break;
+          case 'audio_chunk':
+            if (event.audio_base64) handlers.onAudioChunk?.(event.audio_base64, event.index);
+            break;
+          case 'meta':
+            handlers.onMeta?.(event as TriggerMeta);
+            break;
+          case 'error':
+            throw new ApiError(event.detail ?? 'Something went wrong.');
+          case 'done':
+          default:
+            break;
+        }
+      }
+    }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return;
+    throw err;
+  }
+}
+
+async function streamWithQueueRetry(
+  path: string,
+  body: Record<string, unknown>,
+  handlers: StreamHandlers,
+  onQueued?: (attempt: number, retryAfterSeconds: number) => void,
+  maxAttempts = 3,
+  signal?: AbortSignal,
+): Promise<void> {
+  return withQueueRetry(() => streamRequest(path, body, handlers, signal), onQueued, maxAttempts);
+}
+
 export interface VoiceOptions {
   language?: string;
   voiceGender?: VoiceGender;
@@ -174,40 +279,58 @@ export const api = {
   getPortfolio: (userId: string) => request<PortfolioSnapshot>(`/api/users/${userId}/portfolio`),
   getRecommendation: (userId: string) => request<Recommendation>(`/api/users/${userId}/recommendation`),
   listLanguages: () => request<LanguageInfo[]>('/api/languages'),
-  sendChat: (
+  warmup: () => request<WarmupResult>('/api/warmup', { method: 'POST' }),
+  streamChat: (
     userId: string,
     message: string,
-    voice: VoiceOptions = {},
+    voice: VoiceOptions,
+    handlers: StreamHandlers,
     onQueued?: (attempt: number, retryAfterSeconds: number) => void,
+    signal?: AbortSignal,
   ) =>
-    withQueueRetry(
-      () =>
-        request<ChatResult>(`/api/users/${userId}/chat`, {
-          method: 'POST',
-          body: JSON.stringify({
-            message,
-            language: voice.language ?? 'en',
-            voice_gender: voice.voiceGender ?? 'female',
-          }),
-        }),
+    streamWithQueueRetry(
+      `/api/users/${userId}/chat`,
+      { message, language: voice.language ?? 'en', voice_gender: voice.voiceGender ?? 'female' },
+      handlers,
       onQueued,
+      3,
+      signal,
+    ),
+  streamVoiceChat: (
+    userId: string,
+    audioBase64: string,
+    voice: VoiceOptions,
+    handlers: StreamHandlers,
+    onQueued?: (attempt: number, retryAfterSeconds: number) => void,
+    signal?: AbortSignal,
+  ) =>
+    streamWithQueueRetry(
+      `/api/users/${userId}/voice-chat`,
+      {
+        audio_base64: audioBase64,
+        language: voice.language ?? 'en',
+        voice_gender: voice.voiceGender ?? 'female',
+      },
+      handlers,
+      onQueued,
+      3,
+      signal,
     ),
   listTriggers: () => request<TriggerInfo[]>('/api/triggers'),
-  fireTrigger: (
+  streamTrigger: (
     triggerType: string,
-    voice: VoiceOptions = {},
+    voice: VoiceOptions,
+    handlers: StreamHandlers,
     onQueued?: (attempt: number, retryAfterSeconds: number) => void,
+    signal?: AbortSignal,
   ) =>
-    withQueueRetry(
-      () =>
-        request<TriggerResult>(`/api/triggers/${triggerType}`, {
-          method: 'POST',
-          body: JSON.stringify({
-            language: voice.language ?? 'en',
-            voice_gender: voice.voiceGender ?? 'female',
-          }),
-        }),
+    streamWithQueueRetry(
+      `/api/triggers/${triggerType}`,
+      { language: voice.language ?? 'en', voice_gender: voice.voiceGender ?? 'female' },
+      handlers,
       onQueued,
+      3,
+      signal,
     ),
 };
 

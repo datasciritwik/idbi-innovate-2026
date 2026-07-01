@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, Response
+import json
+
+from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from .. import config
 from ..security.deps import SessionContext, require_quota, require_session
 from ..security.gpu_gate import gpu_slot
-from ..services import tts
-from ..services.text_normalize import normalize_numbers_for_speech
-from ..services.triggers import run_trigger
+from ..services.streaming import stream_text_and_audio
+from ..services.triggers import start_trigger
 
 router = APIRouter(prefix="/api/triggers", tags=["triggers"])
 
@@ -24,18 +26,26 @@ def list_triggers():
 @router.post("/{trigger_type}")
 async def fire_trigger(
     trigger_type: str,
-    response: Response,
     body: TriggerRequest | None = None,
     ctx: SessionContext = Depends(require_quota),
 ):
+    """Streams the reaction as newline-delimited JSON events (meta,
+    text_delta, audio_chunk, done) — meta (before/after numbers) arrives
+    immediately, then the reply streams in with its audio close behind."""
     body = body or TriggerRequest()
     language = body.language if body.language in config.SUPPORTED_LANGUAGES else config.DEFAULT_LANGUAGE
     gender = body.voice_gender if body.voice_gender in ("male", "female") else config.DEFAULT_VOICE_GENDER
 
-    async with gpu_slot():
-        result = run_trigger(trigger_type, language=language)
-        speech_text = normalize_numbers_for_speech(result["reply"], language)
-        result["audio_base64"] = tts.synthesize(speech_text, gender=gender, language=language)
+    # Resolved eagerly (not inside the generator) so an unknown trigger_type
+    # still surfaces as a real 404 rather than a mid-stream error event.
+    meta, text_stream = start_trigger(trigger_type, language=language)
 
-    response.headers["X-Quota-Remaining-Seconds"] = str(int(ctx.quota_remaining_seconds or 0))
-    return result
+    async def event_stream():
+        yield json.dumps({"type": "meta", **meta}) + "\n"
+        async with gpu_slot():
+            async for event in stream_text_and_audio(text_stream, gender, language):
+                yield json.dumps(event) + "\n"
+        yield json.dumps({"type": "done"}) + "\n"
+
+    headers = {"X-Quota-Remaining-Seconds": str(int(ctx.quota_remaining_seconds or 0))}
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers=headers)

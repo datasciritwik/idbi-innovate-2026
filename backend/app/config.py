@@ -18,6 +18,12 @@ LLM_ENDPOINT_URL = os.getenv("LLM_ENDPOINT_URL", "")
 # that case, they just skip attaching audio rather than failing outright.
 TTS_ENDPOINT_URL = os.getenv("TTS_ENDPOINT_URL", "")
 
+# URL of the self-hosted speech-to-text endpoint (Whisper-large-v3-turbo; see
+# stt.py) — powers voice input. Gemma 4 12B (the LLM in use) doesn't support
+# audio input natively (only the smaller E2B/E4B variants do), so this is a
+# separate transcription step feeding the same text pipeline.
+STT_ENDPOINT_URL = os.getenv("STT_ENDPOINT_URL", "")
+
 # Languages Wren can be asked to reply in — the TTS model speaks whatever
 # language the *text* is in, so the LLM is instructed to answer in whichever
 # of these the caller picks. Names are what get sent to the LLM instruction

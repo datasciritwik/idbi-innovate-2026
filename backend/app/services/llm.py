@@ -77,27 +77,30 @@ def build_context(user_id: str, recent_txn_count: int = 10) -> dict:
     }
 
 
-def _call(user_prompt: str) -> str:
-    """Calls the self-hosted conversational model endpoint. Request/response
-    contract is a placeholder pending the actual deployment — align this once
-    that endpoint's real API is settled."""
+async def _call_stream(user_prompt: str):
+    """Streams decoded text pieces from the self-hosted model's
+    /generate_stream endpoint as they're generated, instead of waiting for
+    the full reply — lets the caller start TTS on completed sentences
+    before generation finishes."""
     endpoint = _require_endpoint()
     try:
-        # Generous timeout: a cold Modal container can take minutes to
-        # download/load the model before the first response — a warm one
-        # replies in a few seconds. GPU_QUEUE_TIMEOUT_SECONDS (the local
-        # concurrency gate) is separate and already bounds how long a
-        # caller waits for a free slot before this call even starts.
-        response = httpx.post(
-            f"{endpoint}/generate",
-            json={"system": SYSTEM_PROMPT, "prompt": user_prompt},
-            timeout=180.0,
-            follow_redirects=True,
-        )
-        response.raise_for_status()
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            async with client.stream(
+                "POST",
+                f"{endpoint}/generate_stream",
+                json={"system": SYSTEM_PROMPT, "prompt": user_prompt},
+                follow_redirects=True,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    data = json.loads(line)
+                    if data.get("done"):
+                        break
+                    yield data["delta"]
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"Model endpoint request failed: {e}")
-    return response.json()["text"].strip()
 
 
 def _language_instruction(language: str) -> str:
@@ -107,7 +110,7 @@ def _language_instruction(language: str) -> str:
     return f"\n\nRespond entirely in {name}, not English."
 
 
-def chat(user_id: str, message: str, session_id: str, language: str = config.DEFAULT_LANGUAGE) -> str:
+async def chat_stream(user_id: str, message: str, session_id: str, language: str = config.DEFAULT_LANGUAGE):
     context = build_context(user_id)
     history = memory.get_recent_turns(session_id)
     history_block = (
@@ -119,15 +122,18 @@ def chat(user_id: str, message: str, session_id: str, language: str = config.DEF
         f"CUSTOMER QUESTION:\n{message}"
         f"{_language_instruction(language)}"
     )
-    reply = _call(prompt)
+    pieces = []
+    async for delta in _call_stream(prompt):
+        pieces.append(delta)
+        yield delta
+    reply = "".join(pieces).strip()
     memory.record_turn(session_id, "customer", message)
     memory.record_turn(session_id, "wren", reply)
-    return reply
 
 
-def trigger_reaction(
+async def trigger_reaction_stream(
     trigger_type: str, before: dict, after: dict, user_id: str, language: str = config.DEFAULT_LANGUAGE
-) -> str:
+):
     store = get_store()
     user = store.get_user(user_id)
     plan = generate_savings_plan(user_id)
@@ -156,4 +162,5 @@ def trigger_reaction(
         "specific next step tied to their current recommendation."
         f"{_language_instruction(language)}"
     )
-    return _call(prompt)
+    async for delta in _call_stream(prompt):
+        yield delta

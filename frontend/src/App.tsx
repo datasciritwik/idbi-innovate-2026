@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import Avatar from './components/Avatar';
 import PortfolioSnapshot from './components/PortfolioSnapshot';
@@ -7,9 +7,13 @@ import QuickActions from './components/QuickActions';
 import InputBar from './components/InputBar';
 import UserSwitcher from './components/UserSwitcher';
 import VoiceSettings from './components/VoiceSettings';
+import ConnectButton from './components/ConnectButton';
+import type { ConnectionStatus } from './components/ConnectButton';
+import VoiceModeToggle from './components/VoiceModeToggle';
 import { api, ApiError } from './lib/api';
 import type { LanguageInfo, PortfolioSnapshot as PortfolioSnapshotData, UserSummary, VoiceGender } from './lib/api';
-import { playBase64Wav } from './lib/audio';
+import { enqueueAudioChunk, resetAudioQueue } from './lib/audio';
+import { startVoiceSession, stopVoiceSession } from './lib/voice';
 
 const emptyPortfolio: PortfolioSnapshotData = {
   user_id: '',
@@ -43,6 +47,112 @@ export default function App() {
   const [languages, setLanguages] = useState<LanguageInfo[]>([]);
   const [language, setLanguage] = useState('en');
   const [voiceGender, setVoiceGender] = useState<VoiceGender>('female');
+
+  // Self-hosted LLM/TTS containers cold-start on first use (can take a
+  // couple of minutes) — this lets the user eat that latency up front via
+  // an explicit button instead of it landing on their first chat message.
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
+  const [connectionDetail, setConnectionDetail] = useState<string | undefined>(undefined);
+
+  const handleConnect = async () => {
+    setConnectionStatus('connecting');
+    setConnectionDetail(undefined);
+    try {
+      const { llm_ready, tts_ready } = await api.warmup();
+      if (llm_ready && tts_ready) {
+        setConnectionStatus('ready');
+      } else {
+        setConnectionStatus('error');
+        const missing = [!llm_ready && 'reply model', !tts_ready && 'voice model'].filter(Boolean).join(' and ');
+        setConnectionDetail(`Couldn't reach the ${missing} — try again.`);
+      }
+    } catch (err) {
+      setConnectionStatus('error');
+      setConnectionDetail(err instanceof ApiError ? err.message : 'Connection attempt failed.');
+    }
+  };
+
+  // Real-time voice mode: continuous mic listening with voice-activity
+  // detection (VAD) for auto-endpointing, plus "barge-in" — speaking while
+  // Wren is still replying immediately cancels her in-flight reply/audio.
+  const [voiceModeActive, setVoiceModeActive] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  // VAD callbacks are registered once (mic session starts once) but need the
+  // latest state/handlers each turn — routed through refs updated every
+  // render instead of restarting the (slow, permission-gated) mic session.
+  const bargeInRef = useRef<() => void>(() => {});
+  const runVoiceTurnRef = useRef<(wavBase64: string) => void>(() => {});
+
+  const bargeIn = () => {
+    abortControllerRef.current?.abort();
+    resetAudioQueue();
+    setUserQuery('');
+    setWrenText('');
+    setIsProcessing(false);
+    setStatusText('Listening...');
+  };
+  bargeInRef.current = bargeIn;
+
+  const runVoiceTurn = async (wavBase64: string) => {
+    if (!selectedUserId) return;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setIsProcessing(true);
+    setUserQuery('🎤 Listening...');
+    setStatusText('Transcribing...');
+    resetAudioQueue();
+    setWrenText('');
+    try {
+      await api.streamVoiceChat(
+        selectedUserId,
+        wavBase64,
+        { language, voiceGender },
+        {
+          onTranscript: (text) => {
+            setUserQuery(text || '(didn\'t catch that)');
+            setStatusText('Thinking...');
+          },
+          onTextDelta: (text) => setWrenText((prev) => prev + text),
+          onAudioChunk: enqueueAudioChunk,
+        },
+        (attempt, wait) => setStatusText(`All concierge lines are busy — retrying in ${wait}s (attempt ${attempt})...`),
+        controller.signal,
+      );
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === 'AbortError')) {
+        setWrenText(err instanceof ApiError ? err.message : 'Something went wrong reaching Wren.');
+      }
+    } finally {
+      setIsProcessing(false);
+      setStatusText(voiceModeActive ? 'Listening for you...' : 'Here whenever you need me');
+    }
+  };
+  runVoiceTurnRef.current = runVoiceTurn;
+
+  const handleToggleVoiceMode = async () => {
+    if (voiceModeActive) {
+      await stopVoiceSession();
+      setVoiceModeActive(false);
+      setStatusText('Here whenever you need me');
+      return;
+    }
+    try {
+      await startVoiceSession({
+        onSpeechStart: () => bargeInRef.current(),
+        onSpeechEnd: (wavBase64) => runVoiceTurnRef.current(wavBase64),
+      });
+      setVoiceModeActive(true);
+      setStatusText('Listening for you...');
+    } catch {
+      setStatusText("Couldn't access the microphone — check browser permissions.");
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      stopVoiceSession();
+    };
+  }, []);
 
   useEffect(() => {
     api.listLanguages().then(setLanguages).catch(() => setLanguages([]));
@@ -96,6 +206,8 @@ export default function App() {
 
   const triggerResponse = async (actionId: string, customText?: string) => {
     if (isProcessing || !selectedUserId) return;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     // Life-event triggers always play out on their scripted demo user in the
     // backend data — jump the whole widget over so the numbers on screen
@@ -104,20 +216,31 @@ export default function App() {
       setUserQuery(actionId === 'raise' ? 'Got a raise 🎉' : 'Unexpected medical expense');
       setIsProcessing(true);
       setStatusText(actionId === 'raise' ? 'Analyzing salary adjustments...' : 'Reviewing liquidity options...');
+      resetAudioQueue();
+      setWrenText('');
       try {
-        const result = await api.fireTrigger(actionId, { language, voiceGender }, (attempt, wait) =>
-          setStatusText(`All concierge lines are busy — retrying in ${wait}s (attempt ${attempt})...`),
+        await api.streamTrigger(
+          actionId,
+          { language, voiceGender },
+          {
+            onMeta: (meta) => {
+              setSelectedUserId(meta.user_id);
+              loadUser(meta.user_id, { greet: false });
+            },
+            onTextDelta: (text) => setWrenText((prev) => prev + text),
+            onAudioChunk: enqueueAudioChunk,
+          },
+          (attempt, wait) => setStatusText(`All concierge lines are busy — retrying in ${wait}s (attempt ${attempt})...`),
+          controller.signal,
         );
-        setSelectedUserId(result.user_id);
-        await loadUser(result.user_id, { greet: false });
-        setWrenText(result.reply);
-        if (result.audio_base64) playBase64Wav(result.audio_base64);
       } catch (err) {
-        setWrenText(err instanceof ApiError ? err.message : 'Something went wrong running that scenario.');
+        if (!(err instanceof DOMException && err.name === 'AbortError')) {
+          setWrenText(err instanceof ApiError ? err.message : 'Something went wrong running that scenario.');
+        }
       } finally {
         setUserQuery('');
         setIsProcessing(false);
-        setStatusText('Here whenever you need me');
+        setStatusText(voiceModeActive ? 'Listening for you...' : 'Here whenever you need me');
       }
       return;
     }
@@ -128,21 +251,28 @@ export default function App() {
     setUserQuery(message);
     setIsProcessing(true);
     setStatusText('Processing request...');
+    resetAudioQueue();
+    setWrenText('');
     try {
-      const { reply, audio_base64 } = await api.sendChat(
+      await api.streamChat(
         selectedUserId,
         message,
         { language, voiceGender },
+        {
+          onTextDelta: (text) => setWrenText((prev) => prev + text),
+          onAudioChunk: enqueueAudioChunk,
+        },
         (attempt, wait) => setStatusText(`All concierge lines are busy — retrying in ${wait}s (attempt ${attempt})...`),
+        controller.signal,
       );
-      setWrenText(reply);
-      if (audio_base64) playBase64Wav(audio_base64);
     } catch (err) {
-      setWrenText(err instanceof ApiError ? err.message : 'Something went wrong reaching Wren.');
+      if (!(err instanceof DOMException && err.name === 'AbortError')) {
+        setWrenText(err instanceof ApiError ? err.message : 'Something went wrong reaching Wren.');
+      }
     } finally {
       setUserQuery('');
       setIsProcessing(false);
-      setStatusText('Here whenever you need me');
+      setStatusText(voiceModeActive ? 'Listening for you...' : 'Here whenever you need me');
     }
   };
 
@@ -185,6 +315,10 @@ export default function App() {
 
       {/* Top-right control bar: user switcher + device mode */}
       <div className="absolute top-6 right-6 z-30 flex items-center gap-3">
+        <ConnectButton status={connectionStatus} detail={connectionDetail} onConnect={handleConnect} />
+
+        <VoiceModeToggle active={voiceModeActive} onToggle={handleToggleVoiceMode} />
+
         <UserSwitcher
           users={users}
           selectedUserId={selectedUserId}

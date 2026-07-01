@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import config
-from .routers import chat, portfolio, recommendations, session, triggers, users
+from .routers import chat, portfolio, recommendations, session, triggers, users, warmup
 
 app = FastAPI(title="Wren Personalization Engine", version="0.1.0")
 
@@ -20,6 +20,7 @@ app.include_router(portfolio.router)
 app.include_router(recommendations.router)
 app.include_router(chat.router)
 app.include_router(triggers.router)
+app.include_router(warmup.router)
 
 
 @app.get("/health")
