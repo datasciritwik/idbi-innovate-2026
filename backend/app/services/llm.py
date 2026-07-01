@@ -82,10 +82,16 @@ def _call(user_prompt: str) -> str:
     that endpoint's real API is settled."""
     endpoint = _require_endpoint()
     try:
+        # Generous timeout: a cold Modal container can take minutes to
+        # download/load the model before the first response — a warm one
+        # replies in a few seconds. GPU_QUEUE_TIMEOUT_SECONDS (the local
+        # concurrency gate) is separate and already bounds how long a
+        # caller waits for a free slot before this call even starts.
         response = httpx.post(
             f"{endpoint}/generate",
             json={"system": SYSTEM_PROMPT, "prompt": user_prompt},
-            timeout=30.0,
+            timeout=180.0,
+            follow_redirects=True,
         )
         response.raise_for_status()
     except httpx.HTTPError as e:

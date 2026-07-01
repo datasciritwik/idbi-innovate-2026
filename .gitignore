@@ -17,3 +17,7 @@ idbi-innovate-2026-submission-plan.md
 
 # Runtime SQLite databases (per-IP quota ledger, session state)
 backend/data/*.db
+
+# Self-hosted model deployment code — deployed straight to Modal from here,
+# never pushed to the public repo
+modal_deploy/
