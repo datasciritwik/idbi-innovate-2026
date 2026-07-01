@@ -79,3 +79,17 @@ body {
     radial-gradient(circle at 10% 80%, rgba(143, 174, 156, 0.04) 0%, transparent 40%),
     #0b0f1a;
 }
+
+@keyframes soundwave {
+  0%, 100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.animate-soundwave {
+  animation: soundwave 1.2s ease-in-out infinite;
+}
+
