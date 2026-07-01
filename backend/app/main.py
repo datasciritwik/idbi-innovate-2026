@@ -25,3 +25,8 @@ app.include_router(triggers.router)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/languages")
+def list_languages():
+    return [{"code": code, "name": name} for code, name in config.SUPPORTED_LANGUAGES.items()]

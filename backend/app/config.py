@@ -13,6 +13,33 @@ DATA_DIR = Path(os.getenv("DATA_DIR", str(BACKEND_DIR / ".." / "data" / "output"
 # graceful 503 in the meantime.
 LLM_ENDPOINT_URL = os.getenv("LLM_ENDPOINT_URL", "")
 
+# URL of the self-hosted text-to-speech endpoint (Indic Parler-TTS; see
+# tts.py). Empty until deployed — chat/triggers still return text-only in
+# that case, they just skip attaching audio rather than failing outright.
+TTS_ENDPOINT_URL = os.getenv("TTS_ENDPOINT_URL", "")
+
+# Languages Wren can be asked to reply in — the TTS model speaks whatever
+# language the *text* is in, so the LLM is instructed to answer in whichever
+# of these the caller picks. Names are what get sent to the LLM instruction
+# and shown in the frontend; codes are what the frontend/API pass around.
+# Subset of Indic Parler-TTS's supported languages (21 total) that are most
+# relevant for an Indian bank's customer base.
+SUPPORTED_LANGUAGES = {
+    "en": "English",
+    "hi": "Hindi",
+    "bn": "Bengali",
+    "gu": "Gujarati",
+    "kn": "Kannada",
+    "ml": "Malayalam",
+    "mr": "Marathi",
+    "or": "Odia",
+    "ta": "Tamil",
+    "te": "Telugu",
+    "ur": "Urdu",
+}
+DEFAULT_LANGUAGE = "en"
+DEFAULT_VOICE_GENDER = "female"
+
 # Per-session conversation memory (SQLite), replayed into the LLM context so
 # multi-turn chat isn't stateless. Keyed by the anonymous session_id from
 # security/sessions.py, not by user_id — each browser session gets its own

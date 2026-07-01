@@ -14,14 +14,14 @@ _month_index = pd.period_range(end=config.SIM_END_MONTH, periods=config.MONTHS_O
 TRIGGER_DATE = _month_index[config.TRIGGER_MONTH_OFFSET].to_timestamp()
 
 
-def run_trigger(trigger_type: str) -> dict:
+def run_trigger(trigger_type: str, language: str = config.DEFAULT_LANGUAGE) -> dict:
     user_id = config.TRIGGER_USER_MAP.get(trigger_type)
     if user_id is None:
         raise HTTPException(status_code=404, detail=f"Unknown trigger_type: {trigger_type}")
 
     before = compute_features(user_id, end_date=TRIGGER_DATE)
     after = compute_features(user_id, start_date=TRIGGER_DATE)
-    reply = trigger_reaction(trigger_type, before, after, user_id)
+    reply = trigger_reaction(trigger_type, before, after, user_id, language=language)
 
     return {
         "trigger_type": trigger_type,

@@ -100,7 +100,14 @@ def _call(user_prompt: str) -> str:
     return response.json()["text"].strip()
 
 
-def chat(user_id: str, message: str, session_id: str) -> str:
+def _language_instruction(language: str) -> str:
+    name = config.SUPPORTED_LANGUAGES.get(language, config.SUPPORTED_LANGUAGES[config.DEFAULT_LANGUAGE])
+    if language == config.DEFAULT_LANGUAGE:
+        return ""
+    return f"\n\nRespond entirely in {name}, not English."
+
+
+def chat(user_id: str, message: str, session_id: str, language: str = config.DEFAULT_LANGUAGE) -> str:
     context = build_context(user_id)
     history = memory.get_recent_turns(session_id)
     history_block = (
@@ -110,6 +117,7 @@ def chat(user_id: str, message: str, session_id: str) -> str:
         f"CONTEXT:\n{json.dumps(context, default=str)}\n\n"
         f"CONVERSATION SO FAR:\n{history_block}\n\n"
         f"CUSTOMER QUESTION:\n{message}"
+        f"{_language_instruction(language)}"
     )
     reply = _call(prompt)
     memory.record_turn(session_id, "customer", message)
@@ -117,7 +125,9 @@ def chat(user_id: str, message: str, session_id: str) -> str:
     return reply
 
 
-def trigger_reaction(trigger_type: str, before: dict, after: dict, user_id: str) -> str:
+def trigger_reaction(
+    trigger_type: str, before: dict, after: dict, user_id: str, language: str = config.DEFAULT_LANGUAGE
+) -> str:
     store = get_store()
     user = store.get_user(user_id)
     plan = generate_savings_plan(user_id)
@@ -144,5 +154,6 @@ def trigger_reaction(trigger_type: str, before: dict, after: dict, user_id: str)
         "React to this life event as Wren, speaking directly to the customer. "
         "Acknowledge what changed (using the before/after numbers), then give one concrete, "
         "specific next step tied to their current recommendation."
+        f"{_language_instruction(language)}"
     )
     return _call(prompt)
