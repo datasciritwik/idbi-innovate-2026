@@ -22,3 +22,6 @@ backend/data/*.db
 # Self-hosted model deployment code — deployed straight to Modal from here,
 # never pushed to the public repo
 modal_deploy/
+
+# Experimental scratchpad files
+exp/
