@@ -82,3 +82,11 @@ synthetically generated user profiles and transactions (not real bank customers)
 
 Just open **[vitta-app.pages.dev](https://vitta-app.pages.dev)** — no login needed, pick any
 demo user from the switcher and start talking or typing.
+
+## Contact
+
+Built by **Ritwik Singh** — [officialritwik098@gmail.com](mailto:officialritwik098@gmail.com)
+
+---
+
+© 2026 Ritwik Singh. All rights reserved.
