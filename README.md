@@ -4,7 +4,7 @@
 
 **IDBI Innovate 2026 · Track 01: Digital Wealth Management**
 
-🔴 **Live App:** [vitta-app.pages.dev](https://vitta-app.pages.dev)
+🟢 **Live App:** [vitta-app.pages.dev](https://vitta-app.pages.dev)
 
 </div>
 
