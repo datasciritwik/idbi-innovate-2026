@@ -1,5 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
-const STORAGE_KEY = 'wren.session';
+const STORAGE_KEY = 'vitta.session';
 
 interface StoredSession {
   token: string;

@@ -50,7 +50,7 @@ export default function App() {
   const [portfolioLoading, setPortfolioLoading] = useState(true);
 
   // Vitta's active spoken response line
-  const [wrenText, setWrenText] = useState('Connecting to your account...');
+  const [vittaText, setVittaText] = useState('Connecting to your account...');
 
   // User's voice/query flash text
   const [userQuery, setUserQuery] = useState<string>('');
@@ -111,7 +111,7 @@ export default function App() {
     abortControllerRef.current?.abort();
     resetAudioQueue();
     setUserQuery('');
-    setWrenText('');
+    setVittaText('');
     setIsProcessing(false);
     setStatusText('Listening...');
   };
@@ -125,7 +125,7 @@ export default function App() {
     setUserQuery('🎤 Listening...');
     setStatusText('Transcribing...');
     resetAudioQueue();
-    setWrenText('');
+    setVittaText('');
     try {
       await api.streamVoiceChat(
         selectedUserId,
@@ -136,7 +136,7 @@ export default function App() {
             setUserQuery(text || '(didn\'t catch that)');
             setStatusText('Thinking...');
           },
-          onTextDelta: (text) => setWrenText((prev) => prev + text),
+          onTextDelta: (text) => setVittaText((prev) => prev + text),
           onAudioChunk: enqueueAudioChunk,
         },
         (attempt, wait) => setStatusText(`All concierge lines are busy — retrying in ${wait}s (attempt ${attempt})...`),
@@ -144,7 +144,7 @@ export default function App() {
       );
     } catch (err) {
       if (!(err instanceof DOMException && err.name === 'AbortError')) {
-        setWrenText(err instanceof ApiError ? err.message : 'Something went wrong reaching Vitta.');
+        setVittaText(err instanceof ApiError ? err.message : 'Something went wrong reaching Vitta.');
       }
     } finally {
       setIsProcessing(false);
@@ -193,14 +193,14 @@ export default function App() {
       setPortfolio(snapshot);
       if (greet) {
         const direction = snapshot.change_amount >= 0 ? 'up' : 'down';
-        setWrenText(
+        setVittaText(
           `Hello, ${profile.name.split(' ')[0]}. Your portfolio is at ₹${snapshot.total_value.toLocaleString(
             'en-IN',
           )}, ${direction} ${Math.abs(snapshot.change_pct).toFixed(2)}% today. I'm ready whenever you want to model a decision.`,
         );
       }
     } catch (err) {
-      setWrenText(err instanceof ApiError ? err.message : 'Could not load this account.');
+      setVittaText(err instanceof ApiError ? err.message : 'Could not load this account.');
     } finally {
       setPortfolioLoading(false);
       setStatusText('Here whenever you need me');
@@ -239,7 +239,7 @@ export default function App() {
         }
       })
       .catch((err) => {
-        setWrenText(err instanceof ApiError ? err.message : 'Something went wrong loading demo users.');
+        setVittaText(err instanceof ApiError ? err.message : 'Something went wrong loading demo users.');
         setStatusText('Offline');
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -247,7 +247,7 @@ export default function App() {
 
   const handleUserSelect = (userId: string) => {
     setSelectedUserId(userId);
-    setWrenText('Switching accounts...');
+    setVittaText('Switching accounts...');
     loadUser(userId);
   };
 
@@ -264,7 +264,7 @@ export default function App() {
       setIsProcessing(true);
       setStatusText(actionId === 'raise' ? 'Analyzing salary adjustments...' : 'Reviewing liquidity options...');
       resetAudioQueue();
-      setWrenText('');
+      setVittaText('');
       try {
         await api.streamTrigger(
           actionId,
@@ -274,7 +274,7 @@ export default function App() {
               setSelectedUserId(meta.user_id);
               loadUser(meta.user_id, { greet: false });
             },
-            onTextDelta: (text) => setWrenText((prev) => prev + text),
+            onTextDelta: (text) => setVittaText((prev) => prev + text),
             onAudioChunk: enqueueAudioChunk,
           },
           (attempt, wait) => setStatusText(`All concierge lines are busy — retrying in ${wait}s (attempt ${attempt})...`),
@@ -282,7 +282,7 @@ export default function App() {
         );
       } catch (err) {
         if (!(err instanceof DOMException && err.name === 'AbortError')) {
-          setWrenText(err instanceof ApiError ? err.message : 'Something went wrong running that scenario.');
+          setVittaText(err instanceof ApiError ? err.message : 'Something went wrong running that scenario.');
         }
       } finally {
         setUserQuery('');
@@ -299,14 +299,14 @@ export default function App() {
     setIsProcessing(true);
     setStatusText('Processing request...');
     resetAudioQueue();
-    setWrenText('');
+    setVittaText('');
     try {
       await api.streamChat(
         selectedUserId,
         message,
         { language, voiceGender },
         {
-          onTextDelta: (text) => setWrenText((prev) => prev + text),
+          onTextDelta: (text) => setVittaText((prev) => prev + text),
           onAudioChunk: enqueueAudioChunk,
         },
         (attempt, wait) => setStatusText(`All concierge lines are busy — retrying in ${wait}s (attempt ${attempt})...`),
@@ -314,7 +314,7 @@ export default function App() {
       );
     } catch (err) {
       if (!(err instanceof DOMException && err.name === 'AbortError')) {
-        setWrenText(err instanceof ApiError ? err.message : 'Something went wrong reaching Vitta.');
+        setVittaText(err instanceof ApiError ? err.message : 'Something went wrong reaching Vitta.');
       }
     } finally {
       setUserQuery('');
@@ -465,7 +465,9 @@ export default function App() {
         </div>
 
         {/* Card 2: Voice & Language Configuration */}
-        <div className="bg-ink-raised/40 border border-ink-border/60 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-4">
+        <div className={`bg-ink-raised/40 border border-ink-border/60 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-4 transition-all duration-500 ${
+          connectionStatus !== 'ready' ? 'opacity-40 pointer-events-none select-none filter saturate-50' : ''
+        }`}>
           <span className="text-[10px] font-mono tracking-widest text-paper-dim/60 uppercase font-semibold">Voice & Language Settings</span>
           
           <div className="grid grid-cols-1 gap-3.5">
@@ -518,7 +520,9 @@ export default function App() {
         </div>
 
         {/* Card 3: Real-time Voice Session */}
-        <div className="bg-ink-raised/40 border border-ink-border/60 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-4">
+        <div className={`bg-ink-raised/40 border border-ink-border/60 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-4 transition-all duration-500 ${
+          connectionStatus !== 'ready' ? 'opacity-40 pointer-events-none select-none filter saturate-50' : ''
+        }`}>
           <div className="flex justify-between items-center">
             <span className="text-[10px] font-mono tracking-widest text-paper-dim/60 uppercase font-semibold">Hands-Free Voice Mode</span>
             <div className={`w-2 h-2 rounded-full ${voiceModeActive ? 'bg-gold animate-ping' : 'bg-paper-dim/30'}`} />
@@ -568,17 +572,29 @@ export default function App() {
         {/* Card 4: Cold Start Warmup controls */}
         <div className="bg-ink-raised/40 border border-ink-border/60 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-3 mt-auto">
           <div className="flex justify-between items-center">
-            <span className="text-[10px] font-mono tracking-widest text-paper-dim/60 uppercase font-semibold">Models warmup</span>
-            <span className={`w-1.5 h-1.5 rounded-full ${connectionStatus === 'ready' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+            <span className="text-[10px] font-mono tracking-widest text-paper-dim/60 uppercase font-semibold">Assistant Connection</span>
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              connectionStatus === 'ready' ? 'bg-emerald-400' :
+              connectionStatus === 'connecting' ? 'bg-gold animate-pulse' :
+              connectionStatus === 'error' ? 'bg-rose-400' :
+              'bg-paper-dim/30'
+            }`} />
           </div>
 
-          {(connectionStatus === 'idle' || connectionStatus === 'error') && (
+          {(connectionStatus === 'idle' || connectionStatus === 'error' || connectionStatus === 'connecting') && (
             <button
               type="button"
               onClick={handleConnect}
-              className="w-full py-2.5 px-3 bg-ink/75 border border-ink-border hover:border-gold/30 hover:text-gold text-paper rounded-xl text-xs font-semibold font-body cursor-pointer transition-all duration-300"
+              disabled={connectionStatus === 'connecting'}
+              className="w-full py-2.5 px-3 bg-ink/75 border border-ink-border hover:border-gold/30 hover:text-gold text-paper rounded-xl text-xs font-semibold font-body flex items-center justify-center gap-2 cursor-pointer transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {connectionStatus === 'error' ? 'Retry Warmup Session' : 'Warm Up AI Containers'}
+              {connectionStatus === 'connecting' && (
+                <svg className="animate-spin h-3.5 w-3.5 text-gold" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              )}
+              {connectionStatus === 'connecting' ? 'Connecting...' : connectionStatus === 'error' ? 'Retry Connection' : 'Connect'}
             </button>
           )}
 
@@ -593,7 +609,7 @@ export default function App() {
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-400 flex-shrink-0">
                 <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" />
               </svg>
-              AI models are awake and responsive.
+              Connected to Vitta assistant.
             </div>
           )}
         </div>
@@ -645,7 +661,7 @@ export default function App() {
                       {/* Mobile Layout: Stacked concierge sections */}
                       <motion.div layout variants={itemVariants} className="flex flex-col items-center justify-center flex-1 min-h-0">
                         <Avatar statusText={statusText} isProcessing={isProcessing} />
-                        <SpokenLine wrenText={wrenText} userQuery={userQuery} />
+                        <SpokenLine vittaText={vittaText} userQuery={userQuery} />
                       </motion.div>
 
                       <motion.div layout variants={itemVariants} className="flex-none">
@@ -659,13 +675,15 @@ export default function App() {
                         />
                       </motion.div>
 
-                      <div className="flex flex-col gap-3 flex-none">
+                      <div className={`flex flex-col gap-3 flex-none transition-all duration-500 ${
+                        connectionStatus !== 'ready' ? 'opacity-35 pointer-events-none select-none' : ''
+                      }`}>
                         <motion.div layout variants={itemVariants} className="overflow-visible">
-                          <QuickActions onActionClick={handleAction} disabled={isProcessing} />
+                          <QuickActions onActionClick={handleAction} disabled={isProcessing || connectionStatus !== 'ready'} />
                         </motion.div>
 
                         <motion.div layout variants={itemVariants} className="mb-1">
-                          <InputBar onSend={handleSend} disabled={isProcessing} />
+                          <InputBar onSend={handleSend} disabled={isProcessing || connectionStatus !== 'ready'} />
                         </motion.div>
                       </div>
                     </>
@@ -675,7 +693,7 @@ export default function App() {
                       {/* Left Column: Avatar & Spoken Response zone */}
                       <motion.div layout variants={itemVariants} className="flex-1 h-full flex flex-col items-center justify-center border-r border-ink-border/30 pr-8">
                         <Avatar statusText={statusText} isProcessing={isProcessing} />
-                        <SpokenLine wrenText={wrenText} userQuery={userQuery} />
+                        <SpokenLine vittaText={vittaText} userQuery={userQuery} />
                       </motion.div>
 
                       {/* Right Column: Expanded Portfolio Snapshot, Actions, Input */}
@@ -691,12 +709,16 @@ export default function App() {
                           />
                         </div>
 
-                        <div className="overflow-visible w-full">
-                          <QuickActions onActionClick={handleAction} disabled={isProcessing} />
+                        <div className={`overflow-visible w-full transition-all duration-500 ${
+                          connectionStatus !== 'ready' ? 'opacity-35 pointer-events-none select-none' : ''
+                        }`}>
+                          <QuickActions onActionClick={handleAction} disabled={isProcessing || connectionStatus !== 'ready'} />
                         </div>
 
-                        <div className="mb-1 w-full">
-                          <InputBar onSend={handleSend} disabled={isProcessing} />
+                        <div className={`mb-1 w-full transition-all duration-500 ${
+                          connectionStatus !== 'ready' ? 'opacity-35 pointer-events-none select-none' : ''
+                        }`}>
+                          <InputBar onSend={handleSend} disabled={isProcessing || connectionStatus !== 'ready'} />
                         </div>
                       </motion.div>
                     </>
