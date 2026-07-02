@@ -1,37 +1,33 @@
-"""Text-to-speech via the self-hosted Indic Parler-TTS endpoint.
+"""Text-to-speech via the self-hosted Indic Parler-TTS model.
 
 Best-effort: if TTS isn't configured or the call fails, callers get None
 back and fall through to text-only — a broken voice clip shouldn't take
 down a chat reply that otherwise worked fine.
 """
 
+import asyncio
 import base64
 import logging
 
-import httpx
-
+from . import modal_client
 from .. import config
 
 logger = logging.getLogger(__name__)
 
 
-def synthesize(
+async def synthesize(
     text: str,
     gender: str = config.DEFAULT_VOICE_GENDER,
     language: str = config.DEFAULT_LANGUAGE,
 ) -> str | None:
     """Returns base64-encoded WAV audio, or None if TTS is unavailable."""
-    if not config.TTS_ENDPOINT_URL:
-        return None
     try:
-        response = httpx.post(
-            f"{config.TTS_ENDPOINT_URL}/synthesize",
-            json={"text": text, "gender": gender, "language": language},
-            timeout=180.0,
-            follow_redirects=True,
-        )
-        response.raise_for_status()
-    except httpx.HTTPError as e:
+        audio_bytes = await modal_client.call_cancellable(modal_client.tts().synthesize, text, gender, language)
+    except modal_client.ModalUnavailable:
+        return None
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
         logger.warning("TTS synthesis failed, falling back to text-only: %s", e)
         return None
-    return base64.b64encode(response.content).decode("ascii")
+    return base64.b64encode(audio_bytes).decode("ascii")

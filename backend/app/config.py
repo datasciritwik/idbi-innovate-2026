@@ -8,21 +8,15 @@ load_dotenv()
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("DATA_DIR", str(BACKEND_DIR / ".." / "data" / "output"))).resolve()
 
-# URL of the self-hosted conversational model endpoint (deployed separately;
-# see llm.py). Empty until that deployment exists — chat/triggers return a
-# graceful 503 in the meantime.
-LLM_ENDPOINT_URL = os.getenv("LLM_ENDPOINT_URL", "")
-
-# URL of the self-hosted text-to-speech endpoint (Indic Parler-TTS; see
-# tts.py). Empty until deployed — chat/triggers still return text-only in
-# that case, they just skip attaching audio rather than failing outright.
-TTS_ENDPOINT_URL = os.getenv("TTS_ENDPOINT_URL", "")
-
-# URL of the self-hosted speech-to-text endpoint (Whisper-large-v3-turbo; see
-# stt.py) — powers voice input. Gemma 4 12B (the LLM in use) doesn't support
-# audio input natively (only the smaller E2B/E4B variants do), so this is a
-# separate transcription step feeding the same text pipeline.
-STT_ENDPOINT_URL = os.getenv("STT_ENDPOINT_URL", "")
+# Modal app (see modal_deploy/wren_app.py) hosting LLMApp/TTSApp/STTApp as
+# @modal.method()s — the backend calls these directly over Modal RPC
+# (modal.Cls.from_name(MODAL_APP_NAME, ...)) instead of HTTP. Requires
+# MODAL_TOKEN_ID/MODAL_TOKEN_SECRET in the environment (from `modal token new`
+# or the Modal dashboard) so the client can authenticate.
+MODAL_APP_NAME = os.getenv("MODAL_APP_NAME", "wren-app")
+MODAL_LLM_CLASS = os.getenv("MODAL_LLM_CLASS", "LLMApp")
+MODAL_TTS_CLASS = os.getenv("MODAL_TTS_CLASS", "TTSApp")
+MODAL_STT_CLASS = os.getenv("MODAL_STT_CLASS", "STTApp")
 
 # Languages Vitta can be asked to reply in — the TTS model speaks whatever
 # language the *text* is in, so the LLM is instructed to answer in whichever

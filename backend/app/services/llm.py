@@ -8,9 +8,9 @@ rather than inventing financial facts.
 """
 import json
 
-import httpx
 from fastapi import HTTPException
 
+from . import modal_client
 from .. import config
 from ..data_store import get_store
 from . import memory
@@ -30,15 +30,6 @@ Tone: warm, concise, confident, private-banking-advisor register — not
 corporate boilerplate, not overly casual. Use ₹ for amounts. Keep replies to
 2-4 sentences unless the question needs a breakdown.
 """
-
-
-def _require_endpoint() -> str:
-    if not config.LLM_ENDPOINT_URL:
-        raise HTTPException(
-            status_code=503,
-            detail="LLM_ENDPOINT_URL is not configured on the server; conversational replies are unavailable.",
-        )
-    return config.LLM_ENDPOINT_URL
 
 
 def build_context(user_id: str, recent_txn_count: int = 10) -> dict:
@@ -79,28 +70,19 @@ def build_context(user_id: str, recent_txn_count: int = 10) -> dict:
 
 async def _call_stream(user_prompt: str):
     """Streams decoded text pieces from the self-hosted model's
-    /generate_stream endpoint as they're generated, instead of waiting for
+    generate_stream() method as they're generated, instead of waiting for
     the full reply — lets the caller start TTS on completed sentences
     before generation finishes."""
-    endpoint = _require_endpoint()
     try:
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            async with client.stream(
-                "POST",
-                f"{endpoint}/generate_stream",
-                json={"system": SYSTEM_PROMPT, "prompt": user_prompt},
-                follow_redirects=True,
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line:
-                        continue
-                    data = json.loads(line)
-                    if data.get("done"):
-                        break
-                    yield data["delta"]
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Model endpoint request failed: {e}")
+        async for piece in modal_client.stream_cancellable(
+            modal_client.llm().generate_stream, SYSTEM_PROMPT, user_prompt
+        ):
+            yield piece
+    except modal_client.ModalUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="The conversational model isn't deployed on Modal yet; conversational replies are unavailable.",
+        )
 
 
 def _language_instruction(language: str) -> str:

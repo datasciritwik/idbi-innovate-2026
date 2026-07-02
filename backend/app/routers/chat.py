@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import binascii
 import json
@@ -78,7 +77,7 @@ async def voice_chat(user_id: str, body: VoiceChatRequest, ctx: SessionContext =
 
     async def event_stream():
         async with gpu_slot():
-            message = await asyncio.to_thread(stt.transcribe, audio_bytes, language)
+            message = await stt.transcribe(audio_bytes, language)
             yield json.dumps({"type": "transcript", "text": message}) + "\n"
             if message.strip():
                 text_stream = chat_stream(user_id, message, ctx.session_id, language=language)

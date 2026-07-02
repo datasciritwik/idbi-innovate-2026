@@ -36,7 +36,7 @@ def split_sentences(buffer: str) -> tuple[list[str], str]:
 
 async def _synthesize_async(text: str, gender: str, language: str) -> str | None:
     speech_text = normalize_numbers_for_speech(text, language)
-    return await asyncio.to_thread(tts_service.synthesize, speech_text, gender, language)
+    return await tts_service.synthesize(speech_text, gender, language)
 
 
 async def stream_text_and_audio(
