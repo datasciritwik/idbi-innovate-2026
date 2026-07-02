@@ -32,6 +32,7 @@ const emptyPortfolio: PortfolioSnapshotData = {
 export default function App() {
   // Toggle device mockup modes
   const [deviceMode, setDeviceMode] = useState<'mobile' | 'tablet'>('mobile');
+  const [guideOpen, setGuideOpen] = useState(true);
 
   // Active navigation tab
   const [activeTab, setActiveTab] = useState<TabId>('home');
@@ -358,12 +359,17 @@ export default function App() {
   const selectedUser = users.find((u) => u.user_id === selectedUserId);
 
   return (
-    <div className="radial-mesh min-h-screen w-screen flex flex-col lg:flex-row relative overflow-hidden bg-ink select-none">
+    <div className="radial-mesh h-screen h-[100dvh] w-screen flex flex-col lg:flex-row relative overflow-hidden bg-ink select-none">
       {/* Noise texture overlay */}
       <div className="noise-overlay absolute inset-0 z-0" />
 
+      {/* Background ambient blobs for deep cinematic contrast */}
+      <div className="absolute top-[-10%] left-[-15%] w-[45vw] h-[45vw] rounded-full bg-gold/5 blur-[120px] pointer-events-none animate-pulse-slow" />
+      <div className="absolute bottom-[-10%] right-[-15%] w-[50vw] h-[50vw] rounded-full bg-sage/5 blur-[140px] pointer-events-none animate-pulse-slower" />
+      <div className="absolute top-[40%] left-[30%] w-[35vw] h-[35vw] rounded-full bg-gold/3 blur-[160px] pointer-events-none" />
+
       {/* LEFT PANEL: Control Center (30% area) */}
-      <div className="w-full lg:w-[30%] xl:w-[28%] max-w-[420px] min-w-[340px] flex flex-col border-b lg:border-b-0 lg:border-r border-ink-border/40 bg-ink-raised/15 backdrop-blur-xl relative z-10 overflow-y-auto custom-scrollbar p-6 gap-6 flex-none">
+      <div className="w-full h-[45vh] lg:h-full lg:w-[30%] xl:w-[28%] max-w-[420px] min-w-[340px] flex flex-col border-b lg:border-b-0 lg:border-r border-ink-border/40 bg-ink-raised/15 backdrop-blur-xl relative z-10 overflow-y-auto custom-scrollbar p-6 gap-6 flex-none">
         
         {/* Branding & Status Header */}
         <div className="flex items-center justify-between pb-4 border-b border-ink-border/30">
@@ -381,6 +387,60 @@ export default function App() {
             }`} />
             <span className="text-[10px] font-mono font-medium text-paper-dim capitalize">{connectionStatus === 'ready' ? 'Online' : connectionStatus}</span>
           </div>
+        </div>
+
+        {/* Card 0: Interactive Guide */}
+        <div className="bg-gold-soft border border-gold/20 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => setGuideOpen(!guideOpen)}
+            className="flex items-center justify-between w-full text-[10px] font-mono tracking-widest text-gold uppercase font-bold cursor-pointer focus:outline-none"
+          >
+            <span>Interactive Demo Guide</span>
+            <svg
+              className={`w-3.5 h-3.5 transform transition-transform duration-300 ${guideOpen ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              strokeWidth={2.5}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+            </svg>
+          </button>
+
+          {guideOpen && (
+            <div className="text-[11px] text-paper-dim/90 font-body leading-relaxed space-y-2 mt-1 border-t border-gold/10 pt-2 transition-all duration-300">
+              <p>
+                Welcome! This interactive workspace lets you test the <span className="text-gold font-medium">Vitta Wealth Concierge</span>. Follow these steps to explore:
+              </p>
+              <ul className="space-y-2 list-none pl-0">
+                <li className="flex gap-2">
+                  <span className="text-gold font-bold">1.</span>
+                  <span>
+                    Click <span className="text-paper font-semibold">Connect</span> in the connection card below to wake up the assistant's AI model session.
+                  </span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-gold font-bold">2.</span>
+                  <span>
+                    Use <span className="text-paper font-semibold">Workspace Display</span> to toggle mobile vs. tablet frames.
+                  </span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-gold font-bold">3.</span>
+                  <span>
+                    Try switching <span className="text-paper font-semibold">Active Roster Profiles</span> to simulate different risk buckets & life event triggers.
+                  </span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-gold font-bold">4.</span>
+                  <span>
+                    Click the device tabs (<span className="text-paper font-semibold">Home, Accounts, Invest, Goals</span>) at the bottom to verify transactions & holdings lists.
+                  </span>
+                </li>
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* Preview Device Mode */}
@@ -617,17 +677,21 @@ export default function App() {
       </div>
 
       {/* RIGHT PANEL: Main View Workspace (70% area) */}
-      <div className="flex-1 flex flex-col items-center justify-center p-6 lg:p-8 relative min-h-0 z-10 overflow-y-auto custom-scrollbar">
+      <div className="flex-1 h-[55vh] lg:h-full flex flex-col items-center justify-center p-6 lg:p-8 relative min-h-0 z-10 overflow-hidden">
 
         {/* Centered Device Container */}
         <div className="flex-1 w-full flex items-center justify-center min-h-0">
           <motion.div
             layout
             transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] as const }}
-            className={`bg-ink/95 border border-ink-border relative shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] flex flex-col pt-6 px-6 pb-0 overflow-hidden transition-all duration-500 ${
+            className={`bg-ink/95 border relative flex flex-col pt-6 px-6 pb-0 overflow-hidden transition-all duration-500 ${
+              connectionStatus === 'ready'
+                ? 'border-gold/25 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85),0_0_50px_rgba(212,175,106,0.06)]'
+                : 'border-ink-border/80 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)]'
+            } ${
               deviceMode === 'mobile'
-                ? 'w-[395px] h-[844px] rounded-[32px] justify-between'
-                : 'w-full max-w-[1080px] h-[720px] rounded-[28px] justify-between'
+                ? 'w-full max-w-[395px] h-full max-h-[800px] aspect-[395/800] rounded-[32px] justify-between'
+                : 'w-full max-w-[1080px] h-full max-h-[700px] aspect-[1080/700] rounded-[28px] justify-between'
             }`}
           >
             {/* Notch header for mobile phone format */}
