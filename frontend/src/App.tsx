@@ -10,6 +10,7 @@ import TabBar from './components/TabBar';
 import AccountsTab from './components/AccountsTab';
 import InvestTab from './components/InvestTab';
 import GoalsTab from './components/GoalsTab';
+import TourGuide from './components/TourGuide';
 
 export type TabId = 'home' | 'accounts' | 'invest' | 'goals';
 type ConnectionStatus = 'idle' | 'connecting' | 'ready' | 'error';
@@ -32,7 +33,8 @@ const emptyPortfolio: PortfolioSnapshotData = {
 export default function App() {
   // Toggle device mockup modes
   const [deviceMode, setDeviceMode] = useState<'mobile' | 'tablet'>('mobile');
-  const [guideOpen, setGuideOpen] = useState(true);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [tourActive, setTourActive] = useState(false);
 
   // Active navigation tab
   const [activeTab, setActiveTab] = useState<TabId>('home');
@@ -77,6 +79,13 @@ export default function App() {
   useEffect(() => subscribeToQuota(setQuota), []);
   useEffect(() => {
     ensureQuotaKnown();
+  }, []);
+
+  useEffect(() => {
+    const completed = localStorage.getItem('vitta.tourCompleted');
+    if (!completed) {
+      setTourActive(true);
+    }
   }, []);
 
   const handleConnect = async () => {
@@ -374,7 +383,17 @@ export default function App() {
         {/* Branding & Status Header */}
         <div className="flex items-center justify-between pb-4 border-b border-ink-border/30">
           <div>
-            <h1 className="font-display-serif text-3xl font-extrabold tracking-widest text-gold bg-gradient-to-r from-gold via-amber-200 to-yellow-100 bg-clip-text text-transparent">VITTA</h1>
+            <div className="flex items-center gap-2.5">
+              <h1 className="font-display-serif text-3xl font-extrabold tracking-widest text-gold bg-gradient-to-r from-gold via-amber-200 to-yellow-100 bg-clip-text text-transparent">VITTA</h1>
+              <button
+                type="button"
+                onClick={() => setTourActive(true)}
+                title="Restart Interactive Tour"
+                className="w-5 h-5 rounded-full border border-gold/30 hover:border-gold hover:bg-gold/15 text-gold flex items-center justify-center text-[10px] font-bold font-mono transition-all duration-300 cursor-pointer focus:outline-none"
+              >
+                ?
+              </button>
+            </div>
             <p className="text-[9px] uppercase tracking-[0.2em] text-paper-dim/80 font-mono mt-0.5">Concierge Control Center</p>
           </div>
           
@@ -444,7 +463,7 @@ export default function App() {
         </div>
 
         {/* Preview Device Mode */}
-        <div className="bg-ink-raised/40 border border-ink-border/60 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-3">
+        <div id="tour-workspace" className="bg-ink-raised/40 border border-ink-border/60 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-3">
           <span className="text-[10px] font-mono tracking-widest text-paper-dim/60 uppercase font-semibold">Workspace Display</span>
           <div className="grid grid-cols-2 gap-1 bg-ink/70 border border-ink-border p-1 rounded-xl">
             <button
@@ -479,7 +498,7 @@ export default function App() {
         </div>
 
         {/* Card 1: Active Account Selection */}
-        <div className="bg-ink-raised/40 border border-ink-border/60 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-3.5">
+        <div id="tour-profile" className="bg-ink-raised/40 border border-ink-border/60 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-3.5">
           <div className="flex justify-between items-center">
             <span className="text-[10px] font-mono tracking-widest text-paper-dim/60 uppercase font-semibold">Active Profile</span>
             {selectedUser?.risk_bucket && (
@@ -525,7 +544,7 @@ export default function App() {
         </div>
 
         {/* Card 2: Voice & Language Configuration */}
-        <div className={`bg-ink-raised/40 border border-ink-border/60 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-4 transition-all duration-500 ${
+        <div id="tour-voice" className={`bg-ink-raised/40 border border-ink-border/60 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-4 transition-all duration-500 ${
           connectionStatus !== 'ready' ? 'opacity-40 pointer-events-none select-none filter saturate-50' : ''
         }`}>
           <span className="text-[10px] font-mono tracking-widest text-paper-dim/60 uppercase font-semibold">Voice & Language Settings</span>
@@ -580,7 +599,7 @@ export default function App() {
         </div>
 
         {/* Card 3: Real-time Voice Session */}
-        <div className={`bg-ink-raised/40 border border-ink-border/60 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-4 transition-all duration-500 ${
+        <div id="tour-handsfree" className={`bg-ink-raised/40 border border-ink-border/60 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-4 transition-all duration-500 ${
           connectionStatus !== 'ready' ? 'opacity-40 pointer-events-none select-none filter saturate-50' : ''
         }`}>
           <div className="flex justify-between items-center">
@@ -630,7 +649,7 @@ export default function App() {
         </div>
 
         {/* Card 4: Cold Start Warmup controls */}
-        <div className="bg-ink-raised/40 border border-ink-border/60 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-3 mt-auto">
+        <div id="tour-connect" className="bg-ink-raised/40 border border-ink-border/60 p-4 rounded-2xl backdrop-blur-md flex flex-col gap-3 mt-auto">
           <div className="flex justify-between items-center">
             <span className="text-[10px] font-mono tracking-widest text-paper-dim/60 uppercase font-semibold">Assistant Connection</span>
             <span className={`w-1.5 h-1.5 rounded-full ${
@@ -674,6 +693,9 @@ export default function App() {
           )}
         </div>
 
+        {/* Dynamic spacer to prevent bottom padding scroll discard in flexbox */}
+        <div className="h-6 w-full flex-none pointer-events-none" />
+
       </div>
 
       {/* RIGHT PANEL: Main View Workspace (70% area) */}
@@ -683,6 +705,7 @@ export default function App() {
         <div className="flex-1 w-full flex items-center justify-center min-h-0">
           <motion.div
             layout
+            id="tour-mockup"
             transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] as const }}
             className={`bg-ink/95 border relative flex flex-col pt-6 px-6 pb-0 overflow-hidden transition-all duration-500 ${
               connectionStatus === 'ready'
@@ -809,11 +832,14 @@ export default function App() {
             </div>
 
             {/* Bottom Tab Navigation Bar */}
-            <TabBar active={activeTab} onChange={setActiveTab} deviceMode={deviceMode} />
+            <div id="tour-tabs">
+              <TabBar active={activeTab} onChange={setActiveTab} deviceMode={deviceMode} />
+            </div>
           </motion.div>
         </div>
 
       </div>
+      {tourActive && <TourGuide onClose={() => setTourActive(false)} />}
     </div>
   );
 }
