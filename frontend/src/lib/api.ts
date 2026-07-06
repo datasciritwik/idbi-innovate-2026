@@ -118,6 +118,7 @@ export interface StreamHandlers {
 export interface WarmupResult {
   llm_ready: boolean;
   tts_ready: boolean;
+  stt_ready: boolean;
 }
 
 class ApiError extends Error {

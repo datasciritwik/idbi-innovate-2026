@@ -7,6 +7,7 @@ to answer only from that context and say so when something isn't in it,
 rather than inventing financial facts.
 """
 import json
+import re
 
 from fastapi import HTTPException
 
@@ -17,6 +18,18 @@ from . import memory
 from .allocation import generate_savings_plan
 from .features import compute_features
 from .portfolio import get_portfolio_snapshot
+
+# Gemma occasionally prefixes its reply with a bare "thought" / "**Thought:**"
+# / "<think>...</think>" reasoning header that leaks past skip_special_tokens.
+# Strip it so it neither shows on screen nor gets spoken by TTS.
+_LEADING_REASONING_RE = re.compile(
+    r"^\s*(?:<think>.*?</think>|\**\s*(?:thought|thinking|reasoning|analysis)[\s:*]*)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _strip_reasoning_prefix(text: str) -> str:
+    return _LEADING_REASONING_RE.sub("", text, count=1).lstrip()
 
 SYSTEM_PROMPT = """You are Vitta, a digital wealth concierge for a bank's mobile app.
 
@@ -68,16 +81,15 @@ def build_context(user_id: str, recent_txn_count: int = 10) -> dict:
     }
 
 
-async def _call_stream(user_prompt: str):
-    """Streams decoded text pieces from the self-hosted model's
-    generate_stream() method as they're generated, instead of waiting for
-    the full reply — lets the caller start TTS on completed sentences
-    before generation finishes."""
+async def _call_full(user_prompt: str) -> str:
+    """Awaits the model's full reply in one shot (no streaming) — the caller
+    then splits into sentences and streams TTS synthesis, so end-users hear
+    audio before the whole reply is done being spoken even though the text
+    itself only lands once generation completes."""
     try:
-        async for piece in modal_client.stream_cancellable(
-            modal_client.llm().generate_stream, SYSTEM_PROMPT, user_prompt
-        ):
-            yield piece
+        return await modal_client.call_cancellable(
+            modal_client.llm().generate, SYSTEM_PROMPT, user_prompt
+        )
     except modal_client.ModalUnavailable:
         raise HTTPException(
             status_code=503,
@@ -92,7 +104,7 @@ def _language_instruction(language: str) -> str:
     return f"\n\nRespond entirely in {name}, not English."
 
 
-async def chat_stream(user_id: str, message: str, session_id: str, language: str = config.DEFAULT_LANGUAGE):
+async def chat_full(user_id: str, message: str, session_id: str, language: str = config.DEFAULT_LANGUAGE) -> str:
     context = build_context(user_id)
     history = memory.get_recent_turns(session_id)
     history_block = (
@@ -104,18 +116,15 @@ async def chat_stream(user_id: str, message: str, session_id: str, language: str
         f"CUSTOMER QUESTION:\n{message}"
         f"{_language_instruction(language)}"
     )
-    pieces = []
-    async for delta in _call_stream(prompt):
-        pieces.append(delta)
-        yield delta
-    reply = "".join(pieces).strip()
+    reply = _strip_reasoning_prefix((await _call_full(prompt)).strip())
     memory.record_turn(session_id, "customer", message)
     memory.record_turn(session_id, "vitta", reply)
+    return reply
 
 
-async def trigger_reaction_stream(
+async def trigger_reaction_full(
     trigger_type: str, before: dict, after: dict, user_id: str, language: str = config.DEFAULT_LANGUAGE
-):
+) -> str:
     store = get_store()
     user = store.get_user(user_id)
     plan = generate_savings_plan(user_id)
@@ -144,5 +153,4 @@ async def trigger_reaction_stream(
         "specific next step tied to their current recommendation."
         f"{_language_instruction(language)}"
     )
-    async for delta in _call_stream(prompt):
-        yield delta
+    return _strip_reasoning_prefix((await _call_full(prompt)).strip())

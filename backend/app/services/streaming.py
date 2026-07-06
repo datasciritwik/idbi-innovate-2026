@@ -1,14 +1,13 @@
-"""Pipelines an LLM text stream into per-sentence TTS audio.
+"""Pipelines a full LLM reply into streamed TTS audio.
 
-As text deltas arrive we accumulate them and, on every completed sentence,
-kick off that sentence's TTS synthesis as a background task immediately —
-while the LLM keeps generating the next sentence on its own GPU. Audio
-chunks are only ever yielded once earlier chunks are ready, so playback
-order on the frontend stays correct even though synthesis happens out of
-lockstep with generation.
+The LLM is called non-streaming — we wait for the full reply, then emit
+it as a single text_delta event so the UI shows the full text at once.
+TTS is where streaming happens: the reply is split into sentences, each
+synthesized in order, and yielded as its own audio_chunk as soon as it's
+ready. This lets playback start after only the first sentence's synthesis
+time instead of the whole reply's.
 """
 
-import asyncio
 import re
 from typing import AsyncIterator
 
@@ -20,9 +19,8 @@ from .text_normalize import normalize_numbers_for_speech
 _SENTENCE_BOUNDARY = re.compile(r"([.!?।؟]+[\"')\]]*\s*)")
 
 
-def split_sentences(buffer: str) -> tuple[list[str], str]:
-    """Returns (complete sentences found so far, leftover unterminated text)."""
-    parts = _SENTENCE_BOUNDARY.split(buffer)
+def split_sentences(text: str) -> list[str]:
+    parts = _SENTENCE_BOUNDARY.split(text)
     sentences = []
     i = 0
     while i + 1 < len(parts):
@@ -30,45 +28,26 @@ def split_sentences(buffer: str) -> tuple[list[str], str]:
         if sentence:
             sentences.append(sentence)
         i += 2
-    remainder = parts[i] if i < len(parts) else ""
-    return sentences, remainder
+    if i < len(parts) and parts[i].strip():
+        sentences.append(parts[i].strip())
+    return sentences
 
 
-async def _synthesize_async(text: str, gender: str, language: str) -> str | None:
-    speech_text = normalize_numbers_for_speech(text, language)
-    return await tts_service.synthesize(speech_text, gender, language)
-
-
-async def stream_text_and_audio(
-    text_stream: AsyncIterator[str], gender: str, language: str
+async def stream_full_text_and_audio(
+    full_text: str, gender: str, language: str
 ) -> AsyncIterator[dict]:
-    """Consumes an async iterator of text deltas. Yields, in order:
-    {"type": "text_delta", "text": ...} for every delta, as it arrives, and
-    {"type": "audio_chunk", "index": ..., "audio_base64": ...} once each
-    sentence's audio is ready. Caller emits the final "done" event.
+    """Yields, in order:
+      {"type": "text_delta", "text": <full reply>}       (one event, the whole reply)
+      {"type": "audio_chunk", "index": i, "audio_base64": ...}  (one per sentence, in order)
+    Caller emits the final "done" event.
     """
-    buffer = ""
-    pending: list[tuple[int, asyncio.Task]] = []
-    next_index = 0
+    text = full_text.strip()
+    if not text:
+        return
 
-    async for delta in text_stream:
-        buffer += delta
-        yield {"type": "text_delta", "text": delta}
+    yield {"type": "text_delta", "text": text}
 
-        sentences, buffer = split_sentences(buffer)
-        for sentence in sentences:
-            idx = next_index
-            next_index += 1
-            pending.append((idx, asyncio.create_task(_synthesize_async(sentence, gender, language))))
-
-        while pending and pending[0][1].done():
-            idx, task = pending.pop(0)
-            yield {"type": "audio_chunk", "index": idx, "audio_base64": task.result()}
-
-    if buffer.strip():
-        idx = next_index
-        next_index += 1
-        pending.append((idx, asyncio.create_task(_synthesize_async(buffer.strip(), gender, language))))
-
-    for idx, task in pending:
-        yield {"type": "audio_chunk", "index": idx, "audio_base64": await task}
+    for idx, sentence in enumerate(split_sentences(text)):
+        speech_text = normalize_numbers_for_speech(sentence, language)
+        audio_base64 = await tts_service.synthesize(speech_text, gender, language)
+        yield {"type": "audio_chunk", "index": idx, "audio_base64": audio_base64}

@@ -92,12 +92,18 @@ export default function App() {
     setConnectionStatus('connecting');
     setConnectionDetail(undefined);
     try {
-      const { llm_ready, tts_ready } = await api.warmup();
-      if (llm_ready && tts_ready) {
+      const { llm_ready, tts_ready, stt_ready } = await api.warmup();
+      if (llm_ready && tts_ready && stt_ready) {
         setConnectionStatus('ready');
       } else {
         setConnectionStatus('error');
-        const missing = [!llm_ready && 'reply model', !tts_ready && 'voice model'].filter(Boolean).join(' and ');
+        const missing = [
+          !llm_ready && 'reply model',
+          !tts_ready && 'voice model',
+          !stt_ready && 'transcription model',
+        ]
+          .filter(Boolean)
+          .join(' and ');
         setConnectionDetail(`Couldn't reach the ${missing} — try again.`);
       }
     } catch (err) {

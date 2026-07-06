@@ -11,8 +11,8 @@ from ..data_store import DataNotFoundError, get_store
 from ..security.deps import SessionContext, require_quota
 from ..security.gpu_gate import gpu_slot
 from ..services import stt
-from ..services.llm import chat_stream
-from ..services.streaming import stream_text_and_audio
+from ..services.llm import chat_full
+from ..services.streaming import stream_full_text_and_audio
 
 router = APIRouter(prefix="/api/users", tags=["chat"])
 
@@ -49,8 +49,8 @@ async def chat(user_id: str, body: ChatRequest, ctx: SessionContext = Depends(re
 
     async def event_stream():
         async with gpu_slot():
-            text_stream = chat_stream(user_id, body.message, ctx.session_id, language=language)
-            async for event in stream_text_and_audio(text_stream, gender, language):
+            reply = await chat_full(user_id, body.message, ctx.session_id, language=language)
+            async for event in stream_full_text_and_audio(reply, gender, language):
                 yield json.dumps(event) + "\n"
         yield json.dumps({"type": "done"}) + "\n"
 
@@ -80,8 +80,8 @@ async def voice_chat(user_id: str, body: VoiceChatRequest, ctx: SessionContext =
             message = await stt.transcribe(audio_bytes, language)
             yield json.dumps({"type": "transcript", "text": message}) + "\n"
             if message.strip():
-                text_stream = chat_stream(user_id, message, ctx.session_id, language=language)
-                async for event in stream_text_and_audio(text_stream, gender, language):
+                reply = await chat_full(user_id, message, ctx.session_id, language=language)
+                async for event in stream_full_text_and_audio(reply, gender, language):
                     yield json.dumps(event) + "\n"
             else:
                 yield json.dumps({"type": "error", "detail": "Didn't catch that — try again."}) + "\n"

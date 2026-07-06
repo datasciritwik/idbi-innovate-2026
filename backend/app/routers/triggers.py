@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from .. import config
 from ..security.deps import SessionContext, require_quota, require_session
 from ..security.gpu_gate import gpu_slot
-from ..services.streaming import stream_text_and_audio
+from ..services.streaming import stream_full_text_and_audio
 from ..services.triggers import start_trigger
 
 router = APIRouter(prefix="/api/triggers", tags=["triggers"])
@@ -38,12 +38,13 @@ async def fire_trigger(
 
     # Resolved eagerly (not inside the generator) so an unknown trigger_type
     # still surfaces as a real 404 rather than a mid-stream error event.
-    meta, text_stream = start_trigger(trigger_type, language=language)
+    meta, reply_awaitable = start_trigger(trigger_type, language=language)
 
     async def event_stream():
         yield json.dumps({"type": "meta", **meta}) + "\n"
         async with gpu_slot():
-            async for event in stream_text_and_audio(text_stream, gender, language):
+            reply = await reply_awaitable
+            async for event in stream_full_text_and_audio(reply, gender, language):
                 yield json.dumps(event) + "\n"
         yield json.dumps({"type": "done"}) + "\n"
 
